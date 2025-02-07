@@ -7,24 +7,26 @@ PaSta is a novel blockchain architecture designed to create a practical, scalabl
 ### Algorithmic Stability Control
 Unlike traditional stablecoins that require pegging to external currencies, PaSta implements internal stability mechanisms that:
 - Monitor average transaction sizes across the network to detect price trends
-- Automatically adjust money supply through small minting or burning operations
-- Maintain purchasing power without external dependencies
-- Create passive stability through continuous, small adjustments
+- Automatically adjust money supply through small minting or burning operations within transactions
 
 ### Dynamic Chain Architecture
 PaSta enables parallel processing through a scalable chain structure:
-- Controlled chain bifurcation allows temporary splits during high transaction volume
-- Special aggregation blocks merge parallel chains back into the main chain
+- One transaction per block
+- Controlled chain bifurcation allows splits when the network is saturated
+- Aggregation blocks merge blocks back towards the main chain
+- Block times get shorter the further from the main chain a block gets (layering)
+- If a block initiates a split, it must also perform an aggregation to be eligible for validation
 - Balance blocks serve as validated checkpoints to optimize transaction history
 - Maintains eventual consistency while enabling dramatically higher throughput
 
 ### User-Based Validation
 Instead of relying on dedicated miners, PaSta distributes validation among network participants:
+- Instead of miners competing for a coin reward, users compete to have their transactions accepted
+- Prior to a transaction block being eligible for validation the node must first validate other transactions
+- Once a block is eligible for validation other users must validate it
 - Transaction privileges are tied directly to blockchain storage contribution
-- Validation requirements scale with transaction size
-- Small transactions process quickly with minimal validation
-- Larger transactions require more extensive validation from high-capacity nodes
-- Natural scaling relationship between transaction capabilities and network contribution
+- Higher layer transactions (further from teh main chain, smaller block time) process quickly with minimal validation
+- Number of validators scales perfectly with number of transactions (because the nodes executing transactions are also the validators)
 
 ## Core Components
 
@@ -73,7 +75,7 @@ PaSta is designed specifically as a medium of exchange rather than a store of va
 - Discourages speculative investment and hoarding
 - Promotes active use in transactions
 - Minimizes short-term value fluctuations
-- May help distinguish it from commodities or investment assets from a regulatory perspective
+- May help distinguish it from commodities or investment assets (from a regulatory perspective)
 
 ## Development Status
 
