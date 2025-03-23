@@ -4,6 +4,7 @@ import time
 import hashlib
 import ecdsa
 import base58
+import random
 from typing import Optional, List, Dict, Tuple
 
 NETWORK_PATH = "C:\\PastaNetwork"
@@ -183,6 +184,12 @@ def generate_keypair() -> tuple:
     
     return private_key_str, public_key_str
 
+def mint_burn_test():
+    """Test function for mint/burn operations that generates a random number between 0.1 and 1"""
+    random_amount = round(random.uniform(0.1, 1.0), 2)
+    print(f"\nGenerated random amount for testing: {random_amount} PASTA")
+    return random_amount
+
 def main_menu():
     """Main CLI interface for the PaSta cryptocurrency network.
     Provides options to:
@@ -190,6 +197,7 @@ def main_menu():
     - Create and sign new transactions
     - View pending transactions in the mempool
     - View the current blockchain state
+    - Test mint/burn functionality
     """
     ensure_network_dirs()
     
@@ -199,9 +207,10 @@ def main_menu():
         print("2. Create transaction")
         print("3. View mempool")
         print("4. View blockchain")
-        print("5. Exit")
+        print("5. Test Mint/Burn")
+        print("6. Exit")
         
-        choice = input("\nEnter your choice (1-5): ")
+        choice = input("\nEnter your choice (1-6): ")
         
         if choice == "1":
             priv, pub = generate_keypair()
@@ -265,6 +274,11 @@ def main_menu():
                 print(json.dumps(blockchain, indent=2))
                 
         elif choice == "5":
+            print("\nTesting Mint/Burn functionality...")
+            amount = mint_burn_test()
+            print(f"This amount ({amount} PASTA) would be used for minting/burning in the real implementation")
+                
+        elif choice == "6":
             print("Goodbye!")
             break
             
