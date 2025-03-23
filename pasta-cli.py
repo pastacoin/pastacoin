@@ -184,6 +184,13 @@ def generate_keypair() -> tuple:
     return private_key_str, public_key_str
 
 def main_menu():
+    """Main CLI interface for the PaSta cryptocurrency network.
+    Provides options to:
+    - Generate new keypairs for transactions
+    - Create and sign new transactions
+    - View pending transactions in the mempool
+    - View the current blockchain state
+    """
     ensure_network_dirs()
     
     while True:
