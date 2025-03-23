@@ -46,7 +46,14 @@ class FakePastaBlockchain:
             "sender_balance_after": 0,
             "receiver_balance_before": 0,
             "receiver_balance_after": initial_balance,
+<<<<<<< HEAD
+            "previous_hash": "0",
+            "validating_block_id": None,
+            "validating_block_subhash": None,
+            "mintburn": 0.0
+=======
             "previous_hash": "0"
+>>>>>>> d95eb08e4bd8562ac4e11c5b197182ed5df72102
         }
         
         # Add genesis block hash
@@ -133,6 +140,26 @@ class FakePastaBlockchain:
         # Get previous block's hash
         previous_hash = self.blockchain[-1]["hash"] if self.blockchain else "0"
         
+<<<<<<< HEAD
+        # Generate random mintburn value between 0 and 0.1
+        mintburn = round(random.uniform(0, 0.1), 6)
+        
+        # For non-genesis blocks, set validating block to be the predecessor
+        validating_block_id = predecessor_index if predecessor_index is not None else None
+        validating_block_subhash = None
+        
+        if validating_block_id is not None:
+            # Create a copy of the validating block without the hash field
+            validating_block = self.blockchain[validating_block_id].copy()
+            if "hash" in validating_block:
+                del validating_block["hash"]
+            # Calculate intermediate hash
+            validating_block_subhash = hashlib.sha256(
+                json.dumps(validating_block, sort_keys=True).encode()
+            ).hexdigest()
+        
+=======
+>>>>>>> d95eb08e4bd8562ac4e11c5b197182ed5df72102
         block = {
             "index": len(self.blockchain),
             "sender": from_address,
@@ -146,7 +173,14 @@ class FakePastaBlockchain:
             "sender_balance_after": sender_balance_before - amount,
             "receiver_balance_before": receiver_balance_before,
             "receiver_balance_after": receiver_balance_before + amount,
+<<<<<<< HEAD
+            "previous_hash": previous_hash,
+            "validating_block_id": validating_block_id,
+            "validating_block_subhash": validating_block_subhash,
+            "mintburn": mintburn
+=======
             "previous_hash": previous_hash
+>>>>>>> d95eb08e4bd8562ac4e11c5b197182ed5df72102
         }
         
         # Calculate and add this block's hash
