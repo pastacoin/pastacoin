@@ -1,3 +1,10 @@
+"""
+This module generates a fake blockchain for testing and visualization purposes.
+It creates a simulated PastaCoin blockchain with random transactions between addresses,
+including proper cryptographic signatures, block hashing, and state transitions.
+The generated blockchain follows the PastaCoin protocol with states A, B, and C for block validation.
+"""
+
 import json
 import hashlib
 import random
