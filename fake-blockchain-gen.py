@@ -46,14 +46,17 @@ class FakePastaBlockchain:
             "sender_balance_after": 0,
             "receiver_balance_before": 0,
             "receiver_balance_after": initial_balance,
-<<<<<<< HEAD
             "previous_hash": "0",
             "validating_block_id": None,
             "validating_block_subhash": None,
-            "mintburn": 0.0
-=======
-            "previous_hash": "0"
->>>>>>> d95eb08e4bd8562ac4e11c5b197182ed5df72102
+            "mintburn": 0.0,
+            # New validation state fields
+            "state": "C",  # Genesis block starts in final state
+            "hash_a": None,  # Genesis doesn't need state A hash
+            "hash_b": None,  # Genesis doesn't need state B hash
+            "hash_c": None,  # Genesis doesn't need state C hash
+            "validated_by": None,  # Genesis doesn't need validation
+            "validated_block": None  # Genesis doesn't need to validate
         }
         
         # Add genesis block hash
@@ -108,13 +111,14 @@ class FakePastaBlockchain:
         signature = signing_key.sign(message.encode())
         return base58.b58encode(signature).decode()
 
-    def calculate_block_hash(self, block: dict) -> str:
+    def calculate_block_hash(self, block: dict, state: str = "C") -> str:
         """Calculate hash of block including all its data"""
-        # Create a copy of the block without the hash field
+        # Create a copy of the block without the hash fields
         block_for_hash = block.copy()
-        if "hash" in block_for_hash:
-            del block_for_hash["hash"]
-            
+        for field in ["hash", "hash_a", "hash_b", "hash_c"]:
+            if field in block_for_hash:
+                del block_for_hash[field]
+                
         # Convert block to string and hash
         block_string = json.dumps(block_for_hash, sort_keys=True)
         return hashlib.sha256(block_string.encode()).hexdigest()
@@ -140,7 +144,6 @@ class FakePastaBlockchain:
         # Get previous block's hash
         previous_hash = self.blockchain[-1]["hash"] if self.blockchain else "0"
         
-<<<<<<< HEAD
         # Generate random mintburn value between 0 and 0.1
         mintburn = round(random.uniform(0, 0.1), 6)
         
@@ -158,8 +161,7 @@ class FakePastaBlockchain:
                 json.dumps(validating_block, sort_keys=True).encode()
             ).hexdigest()
         
-=======
->>>>>>> d95eb08e4bd8562ac4e11c5b197182ed5df72102
+        # Create initial block in state A
         block = {
             "index": len(self.blockchain),
             "sender": from_address,
@@ -173,18 +175,35 @@ class FakePastaBlockchain:
             "sender_balance_after": sender_balance_before - amount,
             "receiver_balance_before": receiver_balance_before,
             "receiver_balance_after": receiver_balance_before + amount,
-<<<<<<< HEAD
             "previous_hash": previous_hash,
             "validating_block_id": validating_block_id,
             "validating_block_subhash": validating_block_subhash,
-            "mintburn": mintburn
-=======
-            "previous_hash": previous_hash
->>>>>>> d95eb08e4bd8562ac4e11c5b197182ed5df72102
+            "mintburn": mintburn,
+            # New validation state fields
+            "state": "A",
+            "hash_a": None,
+            "hash_b": None,
+            "hash_c": None,
+            "validated_by": None,
+            "validated_block": None
         }
         
-        # Calculate and add this block's hash
-        block["hash"] = self.calculate_block_hash(block)
+        # Calculate state A hash
+        block["hash_a"] = self.calculate_block_hash(block, "A")
+        
+        # Simulate validation process
+        # First, this block validates another block (state A -> B)
+        block["validated_block"] = random.randint(0, len(self.blockchain) - 1)
+        block["state"] = "B"
+        block["hash_b"] = self.calculate_block_hash(block, "B")
+        
+        # Then, this block gets validated by another block (state B -> C)
+        block["validated_by"] = random.randint(0, len(self.blockchain) - 1)
+        block["state"] = "C"
+        block["hash_c"] = self.calculate_block_hash(block, "C")
+        
+        # Final hash is the state C hash
+        block["hash"] = block["hash_c"]
         
         return block
     
