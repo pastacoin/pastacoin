@@ -1,154 +1,118 @@
 import json
-import os
+# import os # No longer needed for direct file access
 import time
 import hashlib
 import ecdsa
 import base58
 import random
+import requests # Added
+import argparse # Added
 from typing import Optional, List, Dict, Tuple
 
-NETWORK_PATH = "C:\\PastaNetwork"
+# NETWORK_PATH = "C:\\PastaNetwork" # No longer needed
 
-def ensure_network_dirs():
-    """Ensure network directories exist"""
-    if not os.path.exists(NETWORK_PATH):
-        os.makedirs(NETWORK_PATH)
+# def ensure_network_dirs(): # Removed
+#     """Ensure network directories exist"""
+#     if not os.path.exists(NETWORK_PATH):
+#         os.makedirs(NETWORK_PATH)
 
-def load_json(filename: str, default):
-    filepath = os.path.join(NETWORK_PATH, filename)
-    if os.path.exists(filepath):
-        with open(filepath, 'r') as f:
-            return json.load(f)
-    return default
+# def load_json(filename: str, default): # Removed
+#     filepath = os.path.join(NETWORK_PATH, filename)
+#     if os.path.exists(filepath):
+#         with open(filepath, 'r') as f:
+#             return json.load(f)
+#     return default
 
-def save_json(filename: str, data):
-    filepath = os.path.join(NETWORK_PATH, filename)
-    with open(filepath, 'w') as f:
-        json.dump(data, f, indent=2)
+# def save_json(filename: str, data): # Removed
+#     filepath = os.path.join(NETWORK_PATH, filename)
+#     with open(filepath, 'w') as f:
+#         json.dump(data, f, indent=2)
+
+def get_node_blockchain(node_address: str) -> List[Dict]:
+    """Fetches the current blockchain from the node."""
+    try:
+        response = requests.get(f"{node_address}/blockchain")
+        response.raise_for_status() # Raise exception for bad status codes
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching blockchain from {node_address}: {e}")
+        return []
+
+def get_node_mempool(node_address: str) -> List[Dict]:
+    """Fetches the current mempool from the node."""
+    try:
+        response = requests.get(f"{node_address}/mempool")
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching mempool from {node_address}: {e}")
+        return []
+
+def post_transaction_to_node(node_address: str, transaction: Dict) -> bool:
+    """Posts a new transaction to the node's mempool."""
+    try:
+        response = requests.post(f"{node_address}/add_transaction", json=transaction)
+        response.raise_for_status()
+        print(f"Node response ({response.status_code}): {response.json().get('message')}")
+        return response.status_code == 201 # Check if created
+    except requests.exceptions.RequestException as e:
+        print(f"Error posting transaction to {node_address}: {e}")
+        if e.response is not None:
+            try:
+                print(f"Node error ({e.response.status_code}): {e.response.json().get('message')}")
+            except json.JSONDecodeError:
+                print(f"Node error ({e.response.status_code}): {e.response.text}")
+        return False
 
 def get_balance(address: str, blockchain: List[Dict]) -> float:
     """Calculate balance for an address from blockchain"""
     balance = 0
     for block in blockchain:
+        # Assuming genesis block doesn't affect balances in this calculation
         if block["receiver"] == address:
             balance += block["amount"]
-        if block["sender"] == address:
+        if block["sender"] == address and block["sender"] != "genesis":
             balance -= block["amount"]
     return balance
 
-def find_chain_ends(blockchain: List[Dict], mempool: List[Dict]) -> List[Dict]:
-    """Find all blocks that have no successors"""
-    # Create set of all predecessor_indices
-    used_predecessors = {
-        block.get("predecessor_index") 
-        for block in blockchain + mempool 
-        if block.get("predecessor_index") is not None
-    }
-    
-    # Find blocks that aren't predecessors to any other blocks
-    ends = [
-        block for i, block in enumerate(blockchain)
-        if i not in used_predecessors
-    ]
-    
-    return ends
+# Removed functions that relied on direct file access and complex block creation:
+# find_chain_ends, find_available_end, find_bifurcation_point, create_transaction_block
 
-def find_available_end(blockchain: List[Dict], mempool: List[Dict]) -> Optional[Dict]:
-    """Find an available chain end that isn't taken by mempool transactions"""
-    chain_ends = find_chain_ends(blockchain, [])
-    if not chain_ends:
-        return None
-        
-    # Sort ends by layer (prefer lower layers)
-    chain_ends.sort(key=lambda x: x.get("layer", 0))
-    
-    # Check each end to see if it's already taken in mempool
-    for end in chain_ends:
-        end_index = blockchain.index(end)
-        taken = any(
-            tx.get("predecessor_index") == end_index 
-            for tx in mempool
-        )
-        if not taken:
-            return end
-            
-    return None
+# --- Simplified Transaction Creation ---
+# The node will handle adding predecessor, layer, etc., when it mines/validates blocks.
+# The CLI just creates the core transaction data.
 
-def find_bifurcation_point(blockchain: List[Dict], mempool: List[Dict]) -> Tuple[Dict, int]:
-    """Find the best block to bifurcate from"""
-    # Start with the most recent block
-    if not blockchain:
-        return None, 0
-        
-    current_block = blockchain[-1]
-    current_index = len(blockchain) - 1
-    current_layer = current_block.get("layer", 0)
-    
-    # Walk back until we find a block we can bifurcate from
-    while current_index >= 0:
-        # Count pending transactions already bifurcating from this block
-        pending_bifurcations = sum(
-            1 for tx in mempool
-            if tx.get("predecessor_index") == current_index
-        )
-        
-        # If this block doesn't have too many pending bifurcations, use it
-        if pending_bifurcations < 2:  # Allow up to 2 branches
-            return blockchain[current_index], current_layer + 1
-            
-        current_index -= 1
-        current_block = blockchain[current_index]
-        current_layer = current_block.get("layer", 0)
-        
-    return None, 0
-
-def create_transaction_block(
+def create_core_transaction(
     sender: str,
     receiver: str,
     amount: float,
-    signature: str,
-    timestamp: float,
-    blockchain: List[Dict],
-    mempool: List[Dict]
-) -> Dict:
-    """Create a new transaction block with predecessor and layer information"""
-    # Find available chain end
-    available_end = find_available_end(blockchain, mempool)
-    
-    if available_end:
-        # Use available end
-        predecessor_index = blockchain.index(available_end)
-        layer = available_end.get("layer", 0)
-    else:
-        # Need to bifurcate
-        bifurcation_block, new_layer = find_bifurcation_point(blockchain, mempool)
-        if bifurcation_block:
-            predecessor_index = blockchain.index(bifurcation_block)
-            layer = new_layer
+    private_key_str: str
+) -> Optional[Dict]:
+    """Creates the core transaction data and signs it."""
+    try:
+        timestamp = time.time()
+        signature = sign_transaction(private_key_str, sender, receiver, amount, timestamp)
+
+        transaction = {
+            "sender": sender,
+            "receiver": receiver,
+            "amount": amount,
+            "timestamp": timestamp,
+            "signature": signature
+            # Fields like predecessor_index, layer, balances, hash
+            # will be added by the node when it includes this in a block.
+        }
+
+        # Verify the signature locally before sending
+        if verify_signature(transaction):
+            print("\nLocal signature verified successfully before sending.")
+            return transaction
         else:
-            # Empty blockchain, start at beginning
-            predecessor_index = None
-            layer = 0
-    
-    # Calculate balances
-    sender_balance_before = get_balance(sender, blockchain)
-    receiver_balance_before = get_balance(receiver, blockchain)
-    
-    block = {
-        "sender": sender,
-        "receiver": receiver,
-        "amount": amount,
-        "timestamp": timestamp,
-        "signature": signature,
-        "predecessor_index": predecessor_index,
-        "layer": layer,
-        "sender_balance_before": sender_balance_before,
-        "sender_balance_after": sender_balance_before - amount,
-        "receiver_balance_before": receiver_balance_before,
-        "receiver_balance_after": receiver_balance_before + amount
-    }
-    
-    return block
+            print("\nError: Local signature verification failed! Transaction not sent.")
+            return None
+    except Exception as e:
+        print(f"\nError creating core transaction: {e}")
+        return None
 
 def verify_signature(transaction: dict) -> bool:
     """Verify that a transaction's signature is valid"""
@@ -190,100 +154,111 @@ def mint_burn_test():
     print(f"\nGenerated random amount for testing: {random_amount} PASTA")
     return random_amount
 
-def main_menu():
-    """Main CLI interface for the PaSta cryptocurrency network.
-    Provides options to:
-    - Generate new keypairs for transactions
-    - Create and sign new transactions
-    - View pending transactions in the mempool
-    - View the current blockchain state
-    - Test mint/burn functionality
-    """
-    ensure_network_dirs()
-    
+def main_menu(node_address: str):
+    """Main CLI interface, interacting with a specific PastaNode."""
+    # ensure_network_dirs() # Removed
+
     while True:
-        print("\nPaSta Transaction CLI:")
+        print(f"\n--- Interacting with Node: {node_address} ---")
+        print("PaSta Transaction CLI:")
         print("1. Generate new keypair")
-        print("2. Create transaction")
-        print("3. View mempool")
-        print("4. View blockchain")
-        print("5. Test Mint/Burn")
-        print("6. Exit")
-        
-        choice = input("\nEnter your choice (1-6): ")
-        
+        print("2. Create and Send transaction")
+        print("3. View Node Mempool")
+        print("4. View Node Blockchain")
+        print("5. Check Balance (from Node Blockchain)")
+        print("6. Test Mint/Burn (Local Concept)")
+        print("7. Exit")
+
+        choice = input("\nEnter your choice (1-7): ")
+
         if choice == "1":
             priv, pub = generate_keypair()
             print("\nGenerated new keypair!")
             print(f"Private key: {priv}")
             print(f"Public key (address): {pub}")
-            print("\nSAVE THESE KEYS! They won't be stored locally.")
-            
+            print("\nSAVE THESE KEYS! The node does not store private keys.")
+
         elif choice == "2":
-            blockchain = load_json("blockchain.json", [])
-            mempool = load_json("mempool.json", [])
-            
             # Get transaction details
             private_key = input("Enter your private key: ")
             sender = input("Enter your public key (sender address): ")
             receiver = input("Enter receiver's public key: ")
-            amount = float(input("Enter amount: "))
-            
             try:
-                # Create transaction timestamp
-                timestamp = time.time()
-                
-                # Sign the transaction
-                signature = sign_transaction(private_key, sender, receiver, amount, timestamp)
-                
-                # Create the full transaction block with same timestamp
-                transaction = create_transaction_block(
-                    sender, receiver, amount, signature, timestamp,
-                    blockchain, mempool
-                )
-                
-                # Verify the signature
-                if verify_signature(transaction):
-                    print("\nSignature verified successfully!")
-                    mempool.append(transaction)
-                    save_json("mempool.json", mempool)
-                    
-                    print("Transaction created and added to mempool successfully!")
-                    print("Transaction details:")
-                    print(json.dumps(transaction, indent=2))
-                else:
-                    print("\nError: Signature verification failed!")
-                    
-            except Exception as e:
-                print(f"\nError creating transaction: {str(e)}")
-            
+                amount = float(input("Enter amount: "))
+                if amount <= 0:
+                    print("Amount must be positive.")
+                    continue
+            except ValueError:
+                print("Invalid amount.")
+                continue
+
+            # Create the core transaction data
+            core_transaction = create_core_transaction(sender, receiver, amount, private_key)
+
+            if core_transaction:
+                print("\nCore transaction created:")
+                print(json.dumps(core_transaction, indent=2))
+                # Post it to the node
+                print(f"\nSending transaction to node {node_address}...")
+                post_transaction_to_node(node_address, core_transaction)
+
         elif choice == "3":
-            mempool = load_json("mempool.json", [])
-            if not mempool:
-                print("\nMempool is empty")
+            print(f"\nFetching mempool from {node_address}...")
+            mempool = get_node_mempool(node_address)
+            if mempool is None: # Check if fetch failed
+                 print("Failed to fetch mempool.")
+            elif not mempool:
+                print("Node Mempool is empty")
             else:
-                print("\nCurrent mempool:")
+                print("\nCurrent Node Mempool:")
                 print(json.dumps(mempool, indent=2))
-                
+
         elif choice == "4":
-            blockchain = load_json("blockchain.json", [])
-            if not blockchain:
-                print("\nBlockchain is empty")
+            print(f"\nFetching blockchain from {node_address}...")
+            blockchain = get_node_blockchain(node_address)
+            if blockchain is None: # Check if fetch failed
+                print("Failed to fetch blockchain.")
+            elif not blockchain:
+                print("Node Blockchain is empty")
             else:
-                print("\nCurrent blockchain:")
+                print("\nCurrent Node Blockchain:")
                 print(json.dumps(blockchain, indent=2))
-                
+
         elif choice == "5":
+            address = input("Enter the public key (address) to check balance for: ")
+            print(f"\nFetching blockchain from {node_address} to calculate balance...")
+            blockchain = get_node_blockchain(node_address)
+            if blockchain is not None:
+                balance = get_balance(address, blockchain)
+                print(f"\nCalculated balance for {address[:8]}...: {balance} PASTA")
+            else:
+                print("Could not calculate balance as blockchain fetch failed.")
+
+        elif choice == "6":
             print("\nTesting Mint/Burn functionality...")
             amount = mint_burn_test()
             print(f"This amount ({amount} PASTA) would be used for minting/burning in the real implementation")
-                
-        elif choice == "6":
+
+        elif choice == "7":
             print("Goodbye!")
             break
-            
+
         else:
             print("Invalid choice. Please try again.")
 
 if __name__ == "__main__":
-    main_menu()
+    parser = argparse.ArgumentParser(description='PastaCoin CLI Client')
+    parser.add_argument('--node', type=str, default='http://localhost:5000', help='Address of the PastaNode to connect to.')
+    args = parser.parse_args()
+
+    print(f"Attempting to connect to PastaNode at: {args.node}")
+    # Quick check if node is reachable (optional)
+    try:
+        requests.get(f"{args.node}/blockchain", timeout=2) # Check if blockchain endpoint responds
+        print(f"Successfully connected to node at {args.node}.")
+    except requests.exceptions.RequestException as e:
+        print(f"Warning: Could not connect to node at {args.node}. CLI might not function correctly. Error: {e}")
+        # Decide if we should exit or let the user try anyway
+        # exit(1)
+
+    main_menu(args.node)
