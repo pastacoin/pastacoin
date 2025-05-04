@@ -12,6 +12,7 @@ from typing import Dict, List
 import ecdsa
 import base58
 import os
+import traceback
 
 class FakePastaBlockchain:
     def __init__(self, num_addresses: int = 5, initial_balance: float = 1000.0):
@@ -252,6 +253,13 @@ class FakePastaBlockchain:
 
 # Create and run simulation
 if __name__ == "__main__":
-    pasta = FakePastaBlockchain(num_addresses=5)
-    pasta.generate_blockchain(num_blocks=20)
-    pasta.save_to_files()
+    print("--- Starting FakePastaBlockchain Generation ---")
+    try:
+        pasta = FakePastaBlockchain(num_addresses=5)
+        pasta.generate_blockchain(num_blocks=20)
+        pasta.save_to_files()
+    except Exception as e:
+        print(f"!!! An error occurred during blockchain generation: {e}")
+        traceback.print_exc()
+    finally:
+        print("--- Finished FakePastaBlockchain Generation Attempt ---")
