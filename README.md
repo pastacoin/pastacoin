@@ -2,6 +2,8 @@
 
 PaSta is a novel blockchain architecture designed to create a practical, scalable cryptocurrency for everyday transactions. PaSta is a Proof-of-Work type cryptocurrency, relies on "longest chain" concensus rules and in many other additional ways relies heavily on learnings from the Bitcoin Blockchain. It addresses three fundamental challenges in current cryptocurrency systems: price stability, transaction throughput, and decentralized validation.
 
+A working draft of the whitepaper describing this project can be found here: https://docs.google.com/document/d/16TWRU0hxGe5E3mB4EnAzSYjfOsMuH8AT/edit?usp=sharing&ouid=113569012516612057458&rtpof=true&sd=true
+
 ## Key Features
 
 ### Algorithmic Stability Control
