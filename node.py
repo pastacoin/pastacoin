@@ -71,26 +71,57 @@ class PastaNode:
 
     def add_transaction_to_mempool(self, transaction: dict, origin_peer: str = None) -> bool:
         """Adds a transaction to the mempool if valid and broadcasts if it's new."""
-        # TODO: Add proper validation (signature, balance, etc.) before adding/broadcasting
         tx_signature = transaction.get('signature')
         if not tx_signature:
-             print("Transaction missing signature.")
-             return False # Invalid transaction
+            print("Transaction missing signature.")
+            return False
 
         with self.lock:
             # Duplicate check
             if any(tx.get('signature') == tx_signature for tx in self.mempool):
-                # Don't print if it came from a peer, reduce noise
                 if not origin_peer:
                     print(f"Transaction {tx_signature[:8]}... already in mempool.")
-                return False # Already known
+                return False
+
+            # Set predecessor information for new transactions
+            if transaction.get('state') == 'A':
+                if self.blockchain:
+                    latest_block = self.blockchain[-1]
+                    transaction['predecessor_index'] = len(self.blockchain) - 1
+                    transaction['predecessor_hash'] = latest_block.get('hash')
+                else:
+                    # This is the first transaction after genesis
+                    transaction['predecessor_index'] = 0
+                    transaction['predecessor_hash'] = "0"  # Genesis block hash
+
+            # Handle state transitions
+            if transaction.get('state') == 'B':
+                # Verify that the block being validated exists
+                validated_block_id = transaction.get('validated_block')
+                if validated_block_id is not None and validated_block_id < len(self.blockchain):
+                    validated_block = self.blockchain[validated_block_id]
+                    # Set the hash_b of this block to be the hash_c of the validated block
+                    transaction['hash_b'] = validated_block.get('hash_c')
+                else:
+                    print(f"Invalid validation attempt: Block {validated_block_id} not found")
+                    return False
+
+            elif transaction.get('state') == 'C':
+                # Verify that the validating block exists
+                validated_by_id = transaction.get('validated_by')
+                if validated_by_id is not None and validated_by_id < len(self.blockchain):
+                    validating_block = self.blockchain[validated_by_id]
+                    # Set the hash_c of this block to be the hash_b of the validating block
+                    transaction['hash_c'] = validating_block.get('hash_b')
+                else:
+                    print(f"Invalid validation attempt: Validating block {validated_by_id} not found")
+                    return False
 
             self.mempool.append(transaction)
-            print(f"Transaction {tx_signature[:8]}... added to mempool (received from {origin_peer or 'local CLI'}).")
+            print(f"Transaction {tx_signature[:8]}... added to mempool (state: {transaction.get('state')})")
 
-        # Broadcast *only* if this node received it first (not from another peer)
+        # Broadcast only if this node received it first
         if origin_peer is None:
-            # Run broadcast in a separate thread to avoid blocking the response
             thread = threading.Thread(target=self._broadcast_transaction, args=(transaction,))
             thread.start()
 

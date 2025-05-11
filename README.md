@@ -88,6 +88,71 @@ This project is currently in the conceptual phase. Next steps include:
 - Conducting security analysis
 - Building community support
 
+## Testing the System
+
+### Prerequisites
+- Python 3.7 or higher
+- Required Python packages: `flask`, `requests`, `ecdsa`, `base58`
+
+Install dependencies:
+```bash
+pip install flask requests ecdsa base58
+```
+
+### Running the Test Environment
+
+1. Start the Node:
+```bash
+python node.py -p 5000
+```
+
+2. In a new terminal, start the CLI:
+```bash
+python pasta-cli.py --node http://localhost:5000
+```
+
+### Testing Transaction Flow
+
+1. Generate Addresses:
+   - In the CLI, choose option 1 to generate a new keypair
+   - Save both the private and public keys
+   - Generate at least 2 keypairs (for sender and receiver)
+
+2. Create Initial Transaction:
+   - Choose option 2 to create a transaction
+   - Enter the sender's private key
+   - Enter the sender's public key
+   - Enter the receiver's public key
+   - Enter an amount (e.g., 10.0)
+   - This creates a transaction in State A
+
+3. View Transaction State:
+   - Choose option 3 to view the mempool
+   - Verify the transaction is in State A
+
+4. Advance to State B:
+   - Choose option 7
+   - Select the transaction to validate
+   - Create a new transaction that will validate the selected one
+   - This advances the first transaction to State B
+
+5. Advance to State C:
+   - Choose option 8
+   - Select the transaction to be validated
+   - Create a new transaction that will validate it
+   - This advances the transaction to State C
+
+6. Verify Final State:
+   - Use option 4 to view the blockchain
+   - Use option 5 to check balances
+
+### Testing Notes
+- Each transaction must go through states A -> B -> C
+- State B requires validating another transaction
+- State C requires being validated by another transaction
+- The genesis block starts in State C
+- Hash synchronization occurs between states B and C
+
 ## Contributing
 
 While we're still in early stages, we welcome discussion and contributions from developers interested in:

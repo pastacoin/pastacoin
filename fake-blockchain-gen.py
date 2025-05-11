@@ -57,11 +57,11 @@ class FakePastaBlockchain:
             "validating_block_id": None,
             "validating_block_subhash": None,
             "mintburn": 0.0,
-            # New validation state fields
+            # Validation state fields
             "state": "C",  # Genesis block starts in final state
             "hash_a": None,  # Genesis doesn't need state A hash
             "hash_b": None,  # Genesis doesn't need state B hash
-            "hash_c": None,  # Genesis doesn't need state C hash
+            "hash_c": "0",   # Genesis block's final hash is "0"
             "validated_by": None,  # Genesis doesn't need validation
             "validated_block": None  # Genesis doesn't need to validate
         }

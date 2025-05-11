@@ -94,13 +94,28 @@ def create_core_transaction(
         signature = sign_transaction(private_key_str, sender, receiver, amount, timestamp)
 
         transaction = {
+            # Core transaction data
             "sender": sender,
             "receiver": receiver,
             "amount": amount,
             "timestamp": timestamp,
-            "signature": signature
-            # Fields like predecessor_index, layer, balances, hash
-            # will be added by the node when it includes this in a block.
+            "signature": signature,
+            
+            # State tracking
+            "state": "A",  # Initial state
+            
+            # Hash fields for different states
+            "hash_a": None,  # Will be calculated by node
+            "hash_b": None,  # Will be set when validating another block
+            "hash_c": None,  # Will be set when this block is validated
+            
+            # Validation metadata
+            "validated_block": None,  # ID of the block this transaction will validate
+            "validated_by": None,     # ID of the block that validates this transaction
+            
+            # Predecessor information
+            "predecessor_index": None,  # Will be set by node to latest block
+            "predecessor_hash": None,   # Will be set by node
         }
 
         # Verify the signature locally before sending
@@ -156,20 +171,20 @@ def mint_burn_test():
 
 def main_menu(node_address: str):
     """Main CLI interface, interacting with a specific PastaNode."""
-    # ensure_network_dirs() # Removed
-
     while True:
         print(f"\n--- Interacting with Node: {node_address} ---")
         print("PaSta Transaction CLI:")
         print("1. Generate new keypair")
-        print("2. Create and Send transaction")
+        print("2. Create and Send transaction (State A)")
         print("3. View Node Mempool")
         print("4. View Node Blockchain")
         print("5. Check Balance (from Node Blockchain)")
         print("6. Test Mint/Burn (Local Concept)")
-        print("7. Exit")
+        print("7. Advance Transaction to State B (Validate Another Block)")
+        print("8. Advance Transaction to State C (Get Validated)")
+        print("9. Exit")
 
-        choice = input("\nEnter your choice (1-7): ")
+        choice = input("\nEnter your choice (1-9): ")
 
         if choice == "1":
             priv, pub = generate_keypair()
@@ -205,8 +220,8 @@ def main_menu(node_address: str):
         elif choice == "3":
             print(f"\nFetching mempool from {node_address}...")
             mempool = get_node_mempool(node_address)
-            if mempool is None: # Check if fetch failed
-                 print("Failed to fetch mempool.")
+            if mempool is None:
+                print("Failed to fetch mempool.")
             elif not mempool:
                 print("Node Mempool is empty")
             else:
@@ -216,7 +231,7 @@ def main_menu(node_address: str):
         elif choice == "4":
             print(f"\nFetching blockchain from {node_address}...")
             blockchain = get_node_blockchain(node_address)
-            if blockchain is None: # Check if fetch failed
+            if blockchain is None:
                 print("Failed to fetch blockchain.")
             elif not blockchain:
                 print("Node Blockchain is empty")
@@ -240,6 +255,113 @@ def main_menu(node_address: str):
             print(f"This amount ({amount} PASTA) would be used for minting/burning in the real implementation")
 
         elif choice == "7":
+            # Advance transaction to State B
+            print("\nAdvancing transaction to State B (Validate Another Block)")
+            print("First, let's view the mempool to select a transaction:")
+            mempool = get_node_mempool(node_address)
+            if not mempool:
+                print("No transactions in mempool to validate.")
+                continue
+
+            print("\nAvailable transactions in mempool:")
+            for i, tx in enumerate(mempool):
+                print(f"{i}: {tx.get('signature')[:8]}... (State: {tx.get('state')})")
+
+            try:
+                tx_index = int(input("\nEnter the index of the transaction to validate: "))
+                if tx_index < 0 or tx_index >= len(mempool):
+                    print("Invalid transaction index.")
+                    continue
+
+                # Get the transaction to be validated
+                tx_to_validate = mempool[tx_index]
+                
+                # Create a new transaction that will validate the selected one
+                private_key = input("Enter your private key: ")
+                sender = input("Enter your public key (sender address): ")
+                receiver = input("Enter receiver's public key: ")
+                try:
+                    amount = float(input("Enter amount: "))
+                    if amount <= 0:
+                        print("Amount must be positive.")
+                        continue
+                except ValueError:
+                    print("Invalid amount.")
+                    continue
+
+                # Create the validating transaction
+                validating_tx = create_core_transaction(sender, receiver, amount, private_key)
+                if validating_tx:
+                    # Set it to state B and add validation metadata
+                    validating_tx['state'] = 'B'
+                    validating_tx['validated_block'] = tx_index
+                    
+                    print("\nValidating transaction created:")
+                    print(json.dumps(validating_tx, indent=2))
+                    print(f"\nSending validating transaction to node {node_address}...")
+                    post_transaction_to_node(node_address, validating_tx)
+
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+
+        elif choice == "8":
+            # Advance transaction to State C
+            print("\nAdvancing transaction to State C (Get Validated)")
+            print("First, let's view the mempool to select a transaction:")
+            mempool = get_node_mempool(node_address)
+            if not mempool:
+                print("No transactions in mempool to validate.")
+                continue
+
+            print("\nAvailable transactions in mempool:")
+            for i, tx in enumerate(mempool):
+                print(f"{i}: {tx.get('signature')[:8]}... (State: {tx.get('state')})")
+
+            try:
+                tx_index = int(input("\nEnter the index of the transaction to be validated: "))
+                if tx_index < 0 or tx_index >= len(mempool):
+                    print("Invalid transaction index.")
+                    continue
+
+                # Get the transaction to be validated
+                tx_to_validate = mempool[tx_index]
+                
+                # Create a new transaction that will validate the selected one
+                private_key = input("Enter your private key: ")
+                sender = input("Enter your public key (sender address): ")
+                receiver = input("Enter receiver's public key: ")
+                try:
+                    amount = float(input("Enter amount: "))
+                    if amount <= 0:
+                        print("Amount must be positive.")
+                        continue
+                except ValueError:
+                    print("Invalid amount.")
+                    continue
+
+                # Create the validating transaction
+                validating_tx = create_core_transaction(sender, receiver, amount, private_key)
+                if validating_tx:
+                    # Set it to state B and add validation metadata
+                    validating_tx['state'] = 'B'
+                    validating_tx['validated_block'] = tx_index
+                    
+                    # Update the validated transaction to state C
+                    tx_to_validate['state'] = 'C'
+                    tx_to_validate['validated_by'] = len(mempool)  # Index of the new validating transaction
+                    
+                    print("\nValidating transaction created:")
+                    print(json.dumps(validating_tx, indent=2))
+                    print(f"\nSending validating transaction to node {node_address}...")
+                    post_transaction_to_node(node_address, validating_tx)
+                    
+                    print("\nUpdating validated transaction to state C...")
+                    post_transaction_to_node(node_address, tx_to_validate)
+
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+
+        elif choice == "9":
             print("Goodbye!")
             break
 
