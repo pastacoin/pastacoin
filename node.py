@@ -1,10 +1,18 @@
+# --- Standard Library / Third-party Imports ---
 import json
 import os
 import threading
 import time
-import requests
-from flask import Flask, request, jsonify
 import argparse
+
+# Third-party packages
+import requests
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+
+import ecdsa
+import base58
+import hashlib
 
 # Assuming fake-blockchain-gen.py and fake-mempool-gen.py might still be used
 # initially to create the baseline files.
@@ -37,6 +45,10 @@ class PastaNode:
 
         # Basic locking for thread safety
         self.lock = threading.Lock()
+
+        # If blockchain is empty, create a genesis block
+        if not self.blockchain:
+            self._create_genesis_block()
 
         print(f"Node initialized on port {self.port} at address {self.address}")
         print(f"Initial Blockchain size: {len(self.blockchain)}")
@@ -120,6 +132,11 @@ class PastaNode:
             self.mempool.append(transaction)
             print(f"Transaction {tx_signature[:8]}... added to mempool (state: {transaction.get('state')})")
 
+            # Auto-promote to blockchain if state C (simple prototype logic)
+            if transaction.get("state") == "C":
+                self.blockchain.append(transaction)
+                print(f"Transaction {tx_signature[:8]}... moved to blockchain (state C)")
+
         # Broadcast only if this node received it first
         if origin_peer is None:
             thread = threading.Thread(target=self._broadcast_transaction, args=(transaction,))
@@ -137,9 +154,135 @@ class PastaNode:
         with self.lock:
             return list(self.mempool) # Return a copy
 
-# --- Flask App ---
-app = Flask(__name__)
-node = None # Global node object
+    # -------------------------------------------------------------------
+    # Genesis Block Logic
+    # -------------------------------------------------------------------
+
+    def _create_genesis_block(self):
+        """Create a simple genesis block and append to blockchain."""
+        timestamp = int(time.time())
+        genesis_block = {
+            "index": 0,
+            "sender": "genesis",
+            "receiver": "genesis",
+            "amount": 0,
+            "timestamp": timestamp,
+            "signature": "genesis_signature",
+            "predecessor_index": None,
+            "layer": 0,
+            "previous_hash": "0",
+            # Validation state fields
+            "state": "C",
+            "hash_a": None,
+            "hash_b": None,
+            "hash_c": "0",
+            "validated_by": None,
+            "validated_block": None,
+        }
+
+        # Simple deterministic hash (sha256 of JSON sans 'hash')
+        block_copy = genesis_block.copy()
+        block_copy.pop("hash", None)
+        genesis_block["hash"] = self._calculate_hash(block_copy)
+
+        self.blockchain.append(genesis_block)
+        print("Genesis block created.")
+
+    @staticmethod
+    def _calculate_hash(data: dict) -> str:
+        return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+    # -------------------------------------------------------------------
+    # Convenience helpers to create/sign transactions server-side (optional)
+    # -------------------------------------------------------------------
+
+    def create_transaction_state_a(self, sender_priv: str, sender_pub: str, receiver_pub: str, amount: float) -> dict:
+        """Create and sign a state-A transaction locally on the node (for API convenience)."""
+        timestamp = time.time()
+        # sign
+        signing_key = ecdsa.SigningKey.from_string(base58.b58decode(sender_priv), curve=ecdsa.SECP256k1)
+        message = f"{sender_pub}{receiver_pub}{amount}{timestamp}"
+        signature = base58.b58encode(signing_key.sign(message.encode())).decode()
+
+        tx = {
+            "sender": sender_pub,
+            "receiver": receiver_pub,
+            "amount": amount,
+            "timestamp": timestamp,
+            "signature": signature,
+            "state": "A",
+            "hash_a": None,
+            "hash_b": None,
+            "hash_c": None,
+            "predecessor_index": None,
+            "predecessor_hash": None,
+        }
+        return tx
+
+    def create_transaction_state_b(self, sender_priv: str, sender_pub: str, receiver_pub: str, amount: float, target_index: int) -> dict:
+        """Create a state-B transaction that validates an existing block (by index)."""
+        tx = self.create_transaction_state_a(sender_priv, sender_pub, receiver_pub, amount)
+        tx["state"] = "B"
+        tx["validated_block"] = target_index
+        # Simple hash_b calculation: we hash tx without hash fields (prototype)
+        tx["hash_b"] = self._calculate_hash({k: v for k, v in tx.items() if k not in ["hash_a", "hash_b", "hash_c"]})
+        return tx
+
+    def promote_transaction_to_state_c(self, target_tx: dict, validating_tx_index: int):
+        """Mutate target_tx to state C and set hash_c."""
+        target_tx["state"] = "C"
+        target_tx["validated_by"] = validating_tx_index
+        target_tx["hash_c"] = self._calculate_hash({k: v for k, v in target_tx.items() if k not in ["hash_a", "hash_b", "hash_c"]})
+
+# --- Flask App Setup ---
+# Serve static files from ../frontend (one level up from this file's directory)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir, "frontend"))
+
+app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
+# Enable CORS for all domains in this early prototype
+CORS(app)
+
+node = None  # Global node object
+
+# --------------------------- API ROUTES ------------------------------------
+
+@app.route('/')
+def serve_index():
+    """Serve the frontend if present."""
+    index_path = os.path.join(FRONTEND_DIR, 'index.html')
+    if os.path.exists(index_path):
+        return send_from_directory(FRONTEND_DIR, 'index.html')
+    return "Frontend not built", 404
+
+
+@app.route('/generate_keypair', methods=['GET'])
+def generate_keypair_route():
+    priv, pub = generate_keypair()
+    return jsonify({"private_key": priv, "public_key": pub})
+
+
+@app.route('/create_transaction', methods=['POST'])
+def create_transaction_route():
+    """Convenience endpoint: accept sender priv key & fields, then build tx and send to /add_transaction."""
+    if not node:
+        return "Node not initialized", 500
+
+    data = request.get_json() or {}
+    required = {"private_key", "sender", "receiver", "amount"}
+    if not required.issubset(set(data)):
+        return "Missing fields", 400
+
+    tx = node.create_transaction_state_a(
+        sender_priv=data["private_key"],
+        sender_pub=data["sender"],
+        receiver_pub=data["receiver"],
+        amount=float(data["amount"]),
+    )
+
+    node.add_transaction_to_mempool(tx)
+    return jsonify({"message": "Transaction created", "transaction": tx}), 201
+
 
 @app.route('/blockchain', methods=['GET'])
 def get_blockchain_route():
@@ -188,6 +331,75 @@ def add_transaction_route():
         # 409 Conflict is reasonable if it already exists
         return jsonify(response), 409
 
+# ---------------------------------------------------------------------------
+#                Endpoints for advancing transaction states
+# ---------------------------------------------------------------------------
+
+
+@app.route('/advance_b', methods=['POST'])
+def advance_b_route():
+    if not node:
+        return "Node not initialized", 500
+
+    data = request.get_json() or {}
+    required = {"private_key", "sender", "receiver", "amount", "target_index"}
+    if not required.issubset(set(data)):
+        return "Missing fields", 400
+
+    target_idx = int(data["target_index"])
+    mempool = node.get_mempool()
+    if target_idx < 0 or target_idx >= len(mempool):
+        return "Invalid target_index", 400
+
+    tx_b = node.create_transaction_state_b(
+        sender_priv=data["private_key"],
+        sender_pub=data["sender"],
+        receiver_pub=data["receiver"],
+        amount=float(data["amount"]),
+        target_index=target_idx,
+    )
+
+    node.add_transaction_to_mempool(tx_b)
+    return jsonify({"message": "State B transaction created", "transaction": tx_b}), 201
+
+
+@app.route('/advance_c', methods=['POST'])
+def advance_c_route():
+    if not node:
+        return "Node not initialized", 500
+
+    data = request.get_json() or {}
+    required = {"private_key", "sender", "receiver", "amount", "target_index"}
+    if not required.issubset(set(data)):
+        return "Missing fields", 400
+
+    target_idx = int(data["target_index"])
+    mempool = node.get_mempool()
+    if target_idx < 0 or target_idx >= len(mempool):
+        return "Invalid target_index", 400
+
+    # Create validating tx (state B) first
+    tx_b = node.create_transaction_state_b(
+        sender_priv=data["private_key"],
+        sender_pub=data["sender"],
+        receiver_pub=data["receiver"],
+        amount=float(data["amount"]),
+        target_index=target_idx,
+    )
+
+    # Add validating tx to mempool, capture its index
+    node.add_transaction_to_mempool(tx_b)
+    new_index = len(node.get_mempool()) - 1
+
+    # Promote target transaction to state C
+    target_tx = mempool[target_idx]
+    node.promote_transaction_to_state_c(target_tx, validating_tx_index=new_index)
+
+    # Update mempool entry (replace)
+    with node.lock:
+        node.mempool[target_idx] = target_tx
+
+    return jsonify({"message": "Transaction advanced to state C", "validated_transaction": target_tx, "validating_transaction": tx_b}), 201
 
 # --- Main Execution ---
 if __name__ == '__main__':
