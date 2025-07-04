@@ -244,6 +244,18 @@ app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="")
 CORS(app)
 
 node = None  # Global node object
+# -------------------------------------------------
+# Auto-initialise a PastaNode when this module is
+# imported (e.g. by Gunicorn on Render). If this
+# file is executed directly (`python node.py`), the
+# __main__ block below will still run.
+# -------------------------------------------------
+if node is None:
+    init_port = int(os.getenv("PORT", 5000))  # Render supplies $PORT
+    peers_env = os.getenv("PEERS", "")
+    init_peers = peers_env.split() if peers_env else []
+    node = PastaNode(port=init_port, peers=init_peers)
+    print(f"[Auto-Init] PastaNode started on port {init_port} with peers {init_peers}")
 
 # --------------------------- API ROUTES ------------------------------------
 
