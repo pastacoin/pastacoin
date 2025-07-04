@@ -1,0 +1,6 @@
+   flask
+   flask-cors
+   requests
+   ecdsa
+   base58
+   gunicorn
