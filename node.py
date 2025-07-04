@@ -411,7 +411,8 @@ if __name__ == '__main__':
     # Initialize the node globally
     node = PastaNode(port=args.port, peers=args.peers)
 
-    # Run Flask app
+    # Run Flask app. If Render sets a PORT environment variable, use it, otherwise fallback to CLI arg.
+    port = int(os.getenv("PORT", args.port))
     # Use threaded=True for basic concurrency, allowing multiple requests
-    # Use use_reloader=False to prevent Flask from starting twice in debug mode
-    app.run(host='0.0.0.0', port=args.port, threaded=True, use_reloader=False) 
+    # use_reloader=False prevents Flask from starting twice in debug/envs with auto-reload.
+    app.run(host='0.0.0.0', port=port, threaded=True, use_reloader=False) 
