@@ -40,6 +40,9 @@ class TransactionBlock:
     block_hash: Optional[str] = None
     nonce: Optional[int] = None
 
+    # State marker (A, B, C) simple prototype indicator
+    state: str = "A"
+
     # Extra: signature (not in original spec block but necessary)
     signature: Optional[str] = None
 
