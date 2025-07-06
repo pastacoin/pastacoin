@@ -26,6 +26,23 @@ def ensure_genesis():
         gen = TransactionBlock.create_genesis()
         BLOCKCHAIN.append(gen.__dict__)
 
+    # ensure a Genesis Transaction exists in mempool (State B)
+    if not MEMPOOL:
+        genesis_block_hash = BLOCKCHAIN[0]["block_hash"]
+        gtx = TransactionBlock(
+            sender_address="GENESIS",
+            receiver_address="GENESIS",
+            amount=0,
+            timestamp=int(time.time()),
+            predecessor_id=genesis_block_hash,
+            predecessor_hash=genesis_block_hash,
+            level=0,
+            validated_block_id=genesis_block_hash,
+            validated_block_hash=genesis_block_hash,
+            state="B",
+        )
+        MEMPOOL.append(gtx.__dict__)
+
 ensure_genesis()
 
 # ------------------------------------------------------------------
