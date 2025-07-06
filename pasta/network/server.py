@@ -7,6 +7,7 @@ from flask_cors import CORS
 
 from pasta.core.models import TransactionBlock
 from pasta.validation import engine as ve
+from pasta.core.crypto import generate_keypair as _gen_kp
 
 app = Flask(__name__)
 CORS(app)
@@ -43,8 +44,7 @@ def get_mempool():
 
 @app.route("/generate_keypair")
 def gen_keypair():
-    # Placeholder – front-end now generates keys; return warning.
-    return jsonify({"message": "Generate keys in browser"}), 501
+    return jsonify(_gen_kp())
 
 @app.route("/create_transaction", methods=["POST"])
 def create_tx():
