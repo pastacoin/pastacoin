@@ -24,7 +24,7 @@ class TransactionBlock:
     receiver_balance_after: float = 0.0
 
     # Stability mechanism
-    mint_burn_amount: float = 0.0
+    mint_amount: float = 0.0  # positive=mint, negative=burn
     average_tx_size: float = 0.0
 
     # Validation requirements

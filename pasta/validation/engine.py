@@ -45,7 +45,7 @@ def build_state_a(sender: str, receiver: str, amount: float, predecessor: Transa
         sender_balance_after=0,
         receiver_balance_before=0,
         receiver_balance_after=0,
-        mint_burn_amount=0,
+        mint_amount=0,
         average_tx_size=0,
         required_difficulty=len(DIFFICULTY_PREFIX),
     )

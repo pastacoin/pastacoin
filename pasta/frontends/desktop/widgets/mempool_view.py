@@ -16,6 +16,7 @@ class MempoolView(QDockWidget):
         super().__init__("Mempool", parent)
         self.node = node
         self.table = QTableView()
+        self.table.doubleClicked.connect(self._show_details)
         self.setWidget(self.table)
 
         self.model = QStandardItemModel(0, 3)
@@ -29,6 +30,14 @@ class MempoolView(QDockWidget):
         self.timer.start()
 
         self.refresh()
+
+    def _show_details(self, idx):
+        row = idx.row()
+        mp = self.node.get_mempool()
+        if row < len(mp):
+            from pasta.frontends.desktop.widgets.block_details import BlockDetailsDialog
+            dlg = BlockDetailsDialog(f"Mempool TX #{row}", mp[row], self)
+            dlg.exec()
 
     def refresh(self):
         mp = self.node.get_mempool()

@@ -39,9 +39,18 @@ class MainWindow(QMainWindow):
 
         # Menu
         menu = self.menuBar()
+        view_menu = menu.addMenu("&View")
+        self.action_show_chain = view_menu.addAction("Show Blockchain")
+        self.action_show_mempool = view_menu.addAction("Show Mempool")
+        self.action_show_chain.triggered.connect(lambda: self.blockchain_dock.show())
+        self.action_show_mempool.triggered.connect(lambda: self.mempool_dock.show())
+
         tx_menu = menu.addMenu("&Transactions")
         new_tx_action = tx_menu.addAction("New Transaction Wizard")
         new_tx_action.triggered.connect(self.open_wizard)
+
+        advance_b_action = tx_menu.addAction("Advance to State B…")
+        advance_b_action.triggered.connect(self.open_advance_b_dialog)
 
         wallet_menu = menu.addMenu("&Wallet")
         gen_kp_action = wallet_menu.addAction("Generate New Keypair")
@@ -76,6 +85,31 @@ class MainWindow(QMainWindow):
         from pasta.frontends.desktop.widgets.keypair_dialog import KeypairDialog
         dlg = KeypairDialog(self)
         dlg.exec()
+
+    def open_advance_b_dialog(self):
+        """Prompt for my/target mempool indices and invoke advance_b."""
+        from PySide6.QtWidgets import QDialog, QFormLayout, QSpinBox, QDialogButtonBox, QMessageBox
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Advance Transaction to B")
+        layout = QFormLayout(dlg)
+        my_idx = QSpinBox()
+        target_idx = QSpinBox()
+        mp_len = len(self.node.get_mempool())
+        for sb in (my_idx, target_idx):
+            sb.setRange(0, max(0, mp_len - 1))
+        layout.addRow("My tx index", my_idx)
+        layout.addRow("Target tx index", target_idx)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        layout.addWidget(buttons)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        if dlg.exec() == QDialog.Accepted:
+            tx = self.node.advance_b(my_idx.value(), target_idx.value())
+            if tx:
+                QMessageBox.information(self, "Success", "Transaction advanced to State B.")
+            else:
+                QMessageBox.warning(self, "Error", "Invalid indices chosen.")
 
     def open_wizard(self):
         from pasta.frontends.desktop.widgets.wizard import TransactionWizard

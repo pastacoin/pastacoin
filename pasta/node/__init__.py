@@ -34,6 +34,10 @@ class Node:
         # Guarantee genesis existence on startup
         self._ensure_genesis()
 
+        # rolling stats for experimental minting phase
+        self.tx_counter: int = 0
+        self.total_amount: float = 0.0
+
     # ---------------------------------------------------------------------
     # Genesis helpers
     # ---------------------------------------------------------------------
@@ -73,12 +77,28 @@ class Node:
     # ------------------------------------------------------------------
     # Transaction workflow
     # ------------------------------------------------------------------
+    def _average_amount(self) -> float:
+        return self.total_amount / self.tx_counter if self.tx_counter else 0.0
+
     def create_transaction(self, sender: str, receiver: str, amount: float) -> Dict:
-        """Create a State-A transaction and add it to mempool."""
+        """Create a State-A transaction, apply experimental minting, and add to mempool."""
         with self._lock:
-            predecessor_dict = self.blockchain[-1]
-            predecessor = TransactionBlock(**predecessor_dict)
+            # Experimental minting: first 100k tx may be zero-value; we mint up to target 10 PASTA
+            if amount == 0 and self.tx_counter < 100_000:
+                mint = max(0.0, 10.0 - self._average_amount())
+                amount = mint  # inject minted coins into tx
+            else:
+                mint = 0.0
+
+            predecessor = TransactionBlock(**self.blockchain[-1])
             tx_obj = ve.build_state_a(sender, receiver, amount, predecessor)
+            tx_obj.mint_amount = mint
+            tx_obj.average_tx_size = self._average_amount()
+
+            # stats update (use post-mint amount)
+            self.tx_counter += 1
+            self.total_amount += amount
+
             self.mempool.append(tx_obj.__dict__)
             return tx_obj.__dict__
 

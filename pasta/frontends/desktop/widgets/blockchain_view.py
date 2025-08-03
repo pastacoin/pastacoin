@@ -16,6 +16,7 @@ class BlockchainView(QDockWidget):
         super().__init__("Blockchain", parent)
         self.node = node
         self.table = QTableView()
+        self.table.doubleClicked.connect(self._show_details)
         self.setWidget(self.table)
 
         self.model = QStandardItemModel(0, 4)
@@ -39,6 +40,14 @@ class BlockchainView(QDockWidget):
         self.refresh()
 
     # ------------------------------------------------------------------
+    def _show_details(self, idx):
+        row = idx.row()
+        chain = self.node.get_blockchain()
+        if row < len(chain):
+            from pasta.frontends.desktop.widgets.block_details import BlockDetailsDialog
+            dlg = BlockDetailsDialog(f"Block #{row}", chain[row], self)
+            dlg.exec()
+
     def refresh(self):  # noqa: D401 slot
         chain = self.node.get_blockchain()
         self.model.setRowCount(len(chain))
