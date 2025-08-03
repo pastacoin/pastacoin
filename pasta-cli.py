@@ -49,9 +49,12 @@ def get_node_mempool(node_address: str) -> List[Dict]:
         return []
 
 def post_transaction_to_node(node_address: str, transaction: Dict) -> bool:
+    """Posts a new transaction to the node (State-A)."""
+
+
     """Posts a new transaction to the node's mempool."""
     try:
-        response = requests.post(f"{node_address}/add_transaction", json=transaction)
+        response = requests.post(f"{node_address}/create_transaction", json=transaction)
         response.raise_for_status()
         print(f"Node response ({response.status_code}): {response.json().get('message')}")
         return response.status_code == 201 # Check if created
@@ -168,6 +171,32 @@ def mint_burn_test():
     random_amount = round(random.uniform(0.1, 1.0), 2)
     print(f"\nGenerated random amount for testing: {random_amount} PASTA")
     return random_amount
+
+def advance_b_request(node_address: str, my_index: int, target_index: int) -> bool:
+    """Request the node to advance a transaction to State B."""
+    try:
+        payload = {"my_index": my_index, "target_index": target_index}
+        response = requests.post(f"{node_address}/advance_b", json=payload)
+        response.raise_for_status()
+        print(f"Advance B response ({response.status_code}): {response.json().get('message')}")
+        return response.status_code == 200
+    except requests.exceptions.RequestException as e:
+        print(f"Error advancing to B on {node_address}: {e}")
+        return False
+
+
+def advance_c_request(node_address: str, target_index: int, validator: str) -> bool:
+    """Request the node to advance a transaction to State C and move it into the blockchain."""
+    try:
+        payload = {"target_index": target_index, "validator": validator}
+        response = requests.post(f"{node_address}/advance_c", json=payload)
+        response.raise_for_status()
+        print(f"Advance C response ({response.status_code}): {response.json().get('message')}")
+        return response.status_code == 200
+    except requests.exceptions.RequestException as e:
+        print(f"Error advancing to C on {node_address}: {e}")
+        return False
+
 
 def main_menu(node_address: str):
     """Main CLI interface, interacting with a specific PastaNode."""
@@ -299,7 +328,12 @@ def main_menu(node_address: str):
                     print("\nValidating transaction created:")
                     print(json.dumps(validating_tx, indent=2))
                     print(f"\nSending validating transaction to node {node_address}...")
-                    post_transaction_to_node(node_address, validating_tx)
+                    success = post_transaction_to_node(node_address, validating_tx)
+                    if success:
+                        mem_after = get_node_mempool(node_address)
+                        my_idx = len(mem_after) - 1  # our tx should be last
+                        print(f"\nRequesting node to advance transaction {my_idx} → State B (target {tx_index})...")
+                        advance_b_request(node_address, my_idx, tx_index)
 
             except ValueError:
                 print("Invalid input. Please enter a number.")
@@ -344,19 +378,14 @@ def main_menu(node_address: str):
                 if validating_tx:
                     # Set it to state B and add validation metadata
                     validating_tx['state'] = 'B'
-                    validating_tx['validated_block'] = tx_index
+                    validating_tx['validated_block'] = tx_index  # still needed for proof
                     
-                    # Update the validated transaction to state C
-                    tx_to_validate['state'] = 'C'
-                    tx_to_validate['validated_by'] = len(mempool)  # Index of the new validating transaction
-                    
-                    print("\nValidating transaction created:")
+                    print("\nValidating transaction created (proof-of-validation):")
                     print(json.dumps(validating_tx, indent=2))
                     print(f"\nSending validating transaction to node {node_address}...")
-                    post_transaction_to_node(node_address, validating_tx)
-                    
-                    print("\nUpdating validated transaction to state C...")
-                    post_transaction_to_node(node_address, tx_to_validate)
+                    if post_transaction_to_node(node_address, validating_tx):
+                        print(f"\nRequesting node to move transaction {tx_index} to State C (validator = {sender[:8]}...) ...")
+                        advance_c_request(node_address, tx_index, sender)
 
             except ValueError:
                 print("Invalid input. Please enter a number.")
