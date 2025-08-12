@@ -68,14 +68,16 @@ def post_transaction_to_node(node_address: str, transaction: Dict) -> bool:
         return False
 
 def get_balance(address: str, blockchain: List[Dict]) -> float:
-    """Calculate balance for an address from blockchain"""
-    balance = 0
+    """Calculate balance for an address from blockchain (matches Node schema)."""
+    balance = 0.0
     for block in blockchain:
-        # Assuming genesis block doesn't affect balances in this calculation
-        if block["receiver"] == address:
-            balance += block["amount"]
-        if block["sender"] == address and block["sender"] != "genesis":
-            balance -= block["amount"]
+        recv = block.get("receiver_address")
+        send = block.get("sender_address")
+        amt = float(block.get("amount", 0.0))
+        if recv == address:
+            balance += amt
+        if send == address and send != "GENESIS":
+            balance -= amt
     return balance
 
 # Removed functions that relied on direct file access and complex block creation:

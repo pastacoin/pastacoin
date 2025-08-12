@@ -106,6 +106,8 @@ class PrivateKeyPage(QWizardPage):
         layout = QFormLayout()
         layout.addRow("Sender private key", self.key_edit)
         self.setLayout(layout)
+        # Ensure the wizard re-evaluates completeness as the user types
+        self.key_edit.textChanged.connect(self.completeChanged)
 
     def isComplete(self):  # noqa: D401
         return bool(self.key_edit.text().strip())
@@ -162,5 +164,30 @@ class TransactionWizard(QWizard):
                 QMessageBox.critical(self, "Signing failed", str(exc))
                 return
 
-        print("Created tx (signed):", tx)
+        # Immediately progress to State B by validating the earliest mempool entry (typically genesis)
+        try:
+            # After creation, our tx is the last in mempool
+            mempool = self.node.get_mempool()
+            my_index = len(mempool) - 1
+            if len(mempool) > 1:
+                target_index = 0
+                self.node.advance_b(my_index, target_index)
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self,
+                    "Transaction Created",
+                    "Your transaction is now in mempool (State B). A pending bootstrap transaction was finalized onto the blockchain.",
+                )
+            else:
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self,
+                    "Transaction Created",
+                    "Your transaction is in mempool (State A). No available target to advance to B yet.",
+                )
+        except Exception as exc:
+            # Non-fatal; allow creation even if auto-advance fails
+            QMessageBox.warning(self, "Advance to B failed", str(exc))
+
+        print("Created tx (signed and advanced to B):", tx)
         super().accept()

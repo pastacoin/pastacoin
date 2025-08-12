@@ -30,20 +30,15 @@ class MainWindow(QMainWindow):
     def __init__(self, node: Node, parent: Optional[object] = None) -> None:  # noqa: D401
         super().__init__(parent)
         self.node = node
-        self.setWindowTitle("Pastacoin Desktop (Prototype)")
+        self.setWindowTitle("The Pasta Machine")
 
         # Placeholder content
         # Placeholder central widget (will be replaced by dock panels later)
-        label = QLabel("Welcome to Pasta Machine! Use the menu to create a transaction.", alignment=Qt.AlignCenter)
+        label = QLabel("Welcome to The Pasta Machine! Use the menu to create a transaction.", alignment=Qt.AlignCenter)
         self.setCentralWidget(label)
 
-        # Menu
+        # Menu (no View menu per branding update)
         menu = self.menuBar()
-        view_menu = menu.addMenu("&View")
-        self.action_show_chain = view_menu.addAction("Show Blockchain")
-        self.action_show_mempool = view_menu.addAction("Show Mempool")
-        self.action_show_chain.triggered.connect(lambda: self.blockchain_dock.show())
-        self.action_show_mempool.triggered.connect(lambda: self.mempool_dock.show())
 
         tx_menu = menu.addMenu("&Transactions")
         new_tx_action = tx_menu.addAction("New Transaction Wizard")
@@ -55,6 +50,8 @@ class MainWindow(QMainWindow):
         wallet_menu = menu.addMenu("&Wallet")
         gen_kp_action = wallet_menu.addAction("Generate New Keypair")
         gen_kp_action.triggered.connect(self.generate_keypair_dialog)
+        check_bal_action = wallet_menu.addAction("Check Balance…")
+        check_bal_action.triggered.connect(self.check_balance_dialog)
 
         # Dock widgets
         from pasta.frontends.desktop.widgets.blockchain_view import BlockchainView
@@ -115,6 +112,32 @@ class MainWindow(QMainWindow):
         from pasta.frontends.desktop.widgets.wizard import TransactionWizard
         wizard = TransactionWizard(self.node, self)
         wizard.exec()
+
+    def check_balance_dialog(self):
+        from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QMessageBox
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Check Balance")
+        form = QFormLayout(dlg)
+        addr_edit = QLineEdit()
+        form.addRow("Public address", addr_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        form.addWidget(buttons)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        if dlg.exec() == QDialog.Accepted:
+            address = addr_edit.text().strip()
+            if not address:
+                QMessageBox.warning(self, "Missing", "Please enter an address")
+                return
+            # Compute balance by scanning blockchain
+            chain = self.node.get_blockchain()
+            bal = 0.0
+            for blk in chain:
+                if blk.get("receiver_address") == address:
+                    bal += float(blk.get("amount", 0.0))
+                if blk.get("sender_address") == address and blk.get("sender_address") != "GENESIS":
+                    bal -= float(blk.get("amount", 0.0))
+            QMessageBox.information(self, "Balance", f"Balance for {address[:10]}…: {bal} PASTA")
 
 
 def main() -> None:  # pragma: no cover
