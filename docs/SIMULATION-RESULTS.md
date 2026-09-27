@@ -8,6 +8,26 @@ level `p` (PASTA per unit of real goods) from step 500 to the end; a flat `p` me
 purchasing power. Model definition: docstring of `pasta/sim/economy.py`. Controllers:
 docstring of `pasta/stability/controller.py`.
 
+## Figures and the public page
+
+`python -m pasta.sim.report --figures docs/figures --js <site>/results/data.js` regenerates
+everything below from `pasta/sim/experiments.py`. The interactive version is published at
+https://pastacoin.org/results/ (source: `results/` in the `pastacoin.github.io` repo).
+
+| Figure | Shows |
+|---|---|
+| `docs/figures/shocks-small-multiples.png` | Price level over time under each shock, three policies |
+| `docs/figures/drift-by-shock.png` | Final price change per shock and policy |
+| `docs/figures/granularity-sweep.png` | Self-inflicted price change vs transaction size factor (k = 100) |
+| `docs/figures/gain-tradeoff.png` | Recovery steps and mint/burn churn vs gain (hoarding shock) |
+| `docs/figures/bias-no-shock.png` | What each controller does with no shock at all |
+
+![shocks](figures/shocks-small-multiples.png)
+![drift](figures/drift-by-shock.png)
+![granularity](figures/granularity-sweep.png)
+![gain](figures/gain-tradeoff.png)
+![bias](figures/bias-no-shock.png)
+
 ## 2026-09-27 — first pass: does the average-transaction-size rule hold purchasing power?
 
 ### Setup
@@ -48,9 +68,15 @@ Seeds 1 to 5 give the same picture (trend under hoarding: -23.2 % to -24.4 %).
    within a few percent, and the money supply grew with the economy (+101 % for a 2x real
    economy, +114 % for 2x agents).
 
-2. **The literal asymmetry rule is biased.** With no shock at all the asymmetric trend
-   controller inflated the price level by 10.7 %, and a symmetric variant deflated it by
-   45 %. Cause: mint and burn are sized as a fraction of the transaction they ride on.
+2. **The literal asymmetry rule is biased, and so is the anchored rule at low gain.** With no
+   shock at all the asymmetric trend controller inflated the price level by 10.7 %, a
+   symmetric variant deflated it by 45 %, and the anchored rule at gain 0.1 climbed 19 % from
+   launch (8 % after warm-up) before flattening. Two causes. First, mint and burn are sized
+   as a fraction of the transaction they ride on. Second, the controller only sees executed
+   transactions: large purchases skipped as unaffordable pull the observed average below the
+   anchor, so it mints until the observed average matches. The second effect is partly a
+   model artefact (see limitations) and partly real, since any live network also only
+   observes transactions that clear.
    Mints attach to above-average (large) transactions and burns to below-average (small)
    ones, so mints outweigh burns for the same signal; the symmetric version has the
    opposite bias because burns happen when prices are high (amounts large). Any final rule
@@ -91,6 +117,22 @@ Seeds 1 to 5 give the same picture (trend under hoarding: -23.2 % to -24.4 %).
 - Price level is a closed-form quantity-theory expression, not an emergent market price.
   There are no expectations, no interest, no external exchange rate.
 - No adversarial agents yet (self-dealing, wash trading); see issue #13.
+
+### Granularity sweep (k = 100 so agents can afford the larger purchases)
+
+Final price change when the same real spending is done in transactions `f` times larger:
+
+| f | null | trend | anchored, gain 0.1 | anchored, gain 0.5 |
+|---|---|---|---|---|
+| 1.0 | 0.0 % | +3.9 % | +3.3 % | +2.0 % |
+| 1.25 | 0.0 % | +2.8 % | -10.2 % | -17.7 % |
+| 1.5 | 0.0 % | +2.0 % | -19.8 % | -29.9 % |
+| 2.0 | 0.0 % | +0.2 % | -33.0 % | -46.3 % |
+| 3.0 | 0.0 % | -1.9 % | -44.8 % | -52.8 % |
+| 4.0 | 0.0 % | -3.6 % | -48.1 % | -49.2 % |
+
+The damage saturates around -50 % because burns are capped at a fraction of each
+transaction and only apply to below-average ones.
 
 ### Next experiments
 
