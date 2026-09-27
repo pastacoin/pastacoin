@@ -12,6 +12,7 @@ Current project status and roadmap: `docs/STATUS-2026-09-26.md`. Register of eve
 - Run tests: `.venv/Scripts/python -m pytest -q`
 - Run REST node: `.venv/Scripts/python node.py` (port 5000) then `.venv/Scripts/python pasta-cli.py --node http://localhost:5000`
 - Run simulator: `.venv/Scripts/python -m pasta.sim --compare --shock 2000:money_demand:1.5`
+- Regenerate figures + site data: `.venv/Scripts/python -m pasta.sim.report --figures docs/figures --js ../pastacoin.github.io/results/data.js` (needs `pip install matplotlib`), then commit both repos.
 - Run desktop GUI: `.venv/Scripts/python -m pasta.frontends.desktop`
 - Build Windows exe: `pyinstaller PastaMachine.spec` (output in `dist/`, ignored by git)
 

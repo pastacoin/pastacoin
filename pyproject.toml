@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 gui = ["PySide6>=6.6"]
 dev = ["pytest>=8"]
+report = ["matplotlib>=3.8"]
 
 [tool.setuptools.packages.find]
 where = ["."]
