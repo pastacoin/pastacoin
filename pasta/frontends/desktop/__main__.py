@@ -1,125 +1,133 @@
 from __future__ import annotations
 
-"""Minimal Pastacoin desktop GUI.
+"""The Pasta Machine: minimal PySide6 desktop node.
 
-Launch with:
-
-    python -m pasta.frontends.desktop
-
-If PySide6 is not installed, a helpful message is printed and the program exits
-cleanly so that the rest of the repository (tests, CLI, web) can run without the
-GUI dependency.
+Launch with ``python -m pasta.frontends.desktop``. Set ``PASTA_STORAGE`` to a file
+path to persist the chain between runs.
 """
 
+import logging
+import os
 import sys
+import threading
 from typing import Optional
 
-from pasta import Node
-
-import threading, logging
+from pasta import Node, PastaError
 
 try:
-    from PySide6.QtWidgets import QApplication, QMainWindow, QLabel
     from PySide6.QtCore import Qt
-except ImportError:  # pragma: no cover – optional dependency
+    from PySide6.QtWidgets import QApplication, QLabel, QMainWindow
+except ImportError:  # pragma: no cover - optional dependency
     print("PySide6 is not installed. Install it with 'pip install PySide6' to run the desktop GUI.")
     sys.exit(1)
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, node: Node, parent: Optional[object] = None) -> None:  # noqa: D401
+    def __init__(self, node: Node, parent: Optional[object] = None, start_rest: bool = True) -> None:
         super().__init__(parent)
         self.node = node
         self.setWindowTitle("The Pasta Machine")
 
-        # Placeholder content
-        # Placeholder central widget (will be replaced by dock panels later)
-        label = QLabel("Welcome to The Pasta Machine! Use the menu to create a transaction.", alignment=Qt.AlignCenter)
+        label = QLabel("Welcome to The Pasta Machine. Use the Transactions menu to send and validate.",
+                       alignment=Qt.AlignCenter)
         self.setCentralWidget(label)
 
-        # Menu (no View menu per branding update)
         menu = self.menuBar()
-
         tx_menu = menu.addMenu("&Transactions")
-        new_tx_action = tx_menu.addAction("New Transaction Wizard")
-        new_tx_action.triggered.connect(self.open_wizard)
-
-        advance_b_action = tx_menu.addAction("Advance to State B…")
-        advance_b_action.triggered.connect(self.open_advance_b_dialog)
+        tx_menu.addAction("New Transaction...").triggered.connect(self.open_wizard)
+        tx_menu.addAction("Validate (A -> B, finalize a target)...").triggered.connect(self.open_validate_dialog)
+        tx_menu.addAction("Verify chain").triggered.connect(self.verify_chain)
 
         wallet_menu = menu.addMenu("&Wallet")
-        gen_kp_action = wallet_menu.addAction("Generate New Keypair")
-        gen_kp_action.triggered.connect(self.generate_keypair_dialog)
-        check_bal_action = wallet_menu.addAction("Check Balance…")
-        check_bal_action.triggered.connect(self.check_balance_dialog)
+        wallet_menu.addAction("Generate New Keypair").triggered.connect(self.generate_keypair_dialog)
+        wallet_menu.addAction("Check Balance...").triggered.connect(self.check_balance_dialog)
 
-        # Dock widgets
         from pasta.frontends.desktop.widgets.blockchain_view import BlockchainView
-        from pasta.frontends.desktop.widgets.mempool_view import MempoolView
         from pasta.frontends.desktop.widgets.logs_panel import LogsPanel
+        from pasta.frontends.desktop.widgets.mempool_view import MempoolView
 
         self.blockchain_dock = BlockchainView(self.node, self)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.blockchain_dock)
-
         self.mempool_dock = MempoolView(self.node, self)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.mempool_dock)
-
         self.logs_dock = LogsPanel(self)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logs_dock)
+        self.resize(1100, 700)
 
-        self.resize(1000, 700)
+        if start_rest:
+            def _run_rest():
+                logging.info("Starting embedded REST server on http://127.0.0.1:5000")
+                try:
+                    self.node.start_rest_server(host="127.0.0.1", port=5000, threaded=True)
+                except OSError:
+                    logging.warning("Port 5000 already in use; embedded REST server not started.")
+            threading.Thread(target=_run_rest, daemon=True).start()
 
-        # Start REST server in background thread on an OS-random free port (optional)
-        def _run_rest():
-            logging.info("Starting embedded REST server on http://127.0.0.1:5000")
-            try:
-                self.node.start_rest_server(host="127.0.0.1", port=5000, threaded=True)
-            except OSError:
-                logging.warning("Port 5000 already in use; embedded REST server not started.")
-        threading.Thread(target=_run_rest, daemon=True).start()
-
+    # ------------------------------------------------------------------ actions
     def generate_keypair_dialog(self):
         from pasta.frontends.desktop.widgets.keypair_dialog import KeypairDialog
-        dlg = KeypairDialog(self)
-        dlg.exec()
+        KeypairDialog(self).exec()
 
-    def open_advance_b_dialog(self):
-        """Prompt for my/target mempool indices and invoke advance_b."""
-        from PySide6.QtWidgets import QDialog, QFormLayout, QSpinBox, QDialogButtonBox, QMessageBox
+    def open_wizard(self):
+        from pasta.frontends.desktop.widgets.wizard import TransactionWizard
+        TransactionWizard(self.node, self).exec()
+
+    def open_validate_dialog(self):
+        """Pick one of my State-A transactions and an eligible State-B target."""
+        from PySide6.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QMessageBox
+
+        mempool = self.node.get_mempool()
+        mine = [t for t in mempool if t["state"] == "A"]
+        targets = [t for t in mempool if t["state"] == "B"]
+        if not mine or not targets:
+            QMessageBox.information(self, "Nothing to do",
+                                    "Need at least one State A transaction and one State B target.")
+            return
+
+        def label(t):
+            return f"{t['tx_id'][:10]}  {t['sender_address'][:8]} -> {t['receiver_address'][:8]}  {t['amount']}"
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Advance Transaction to B")
+        dlg.setWindowTitle("Validate")
         layout = QFormLayout(dlg)
-        my_idx = QSpinBox()
-        target_idx = QSpinBox()
-        mp_len = len(self.node.get_mempool())
-        for sb in (my_idx, target_idx):
-            sb.setRange(0, max(0, mp_len - 1))
-        layout.addRow("My tx index", my_idx)
-        layout.addRow("Target tx index", target_idx)
+        my_box, target_box = QComboBox(), QComboBox()
+        for t in mine:
+            my_box.addItem(label(t), t["tx_id"])
+        for t in targets:
+            target_box.addItem(label(t), t["tx_id"])
+        layout.addRow("My transaction (State A)", my_box)
+        layout.addRow("Target to finalize (State B)", target_box)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         layout.addWidget(buttons)
         buttons.accepted.connect(dlg.accept)
         buttons.rejected.connect(dlg.reject)
-        if dlg.exec() == QDialog.Accepted:
-            tx = self.node.advance_b(my_idx.value(), target_idx.value())
-            if tx:
-                QMessageBox.information(self, "Success", "Transaction advanced to State B.")
-            else:
-                QMessageBox.warning(self, "Error", "Invalid indices chosen.")
+        if dlg.exec() != QDialog.Accepted:
+            return
+        try:
+            result = self.node.validate(my_box.currentData(), target_box.currentData())
+        except PastaError as exc:
+            QMessageBox.warning(self, "Rejected", str(exc))
+            return
+        fin = result["finalized"]
+        logging.info("Finalized %s (difficulty %s)", fin["block_hash"][:16], fin["required_difficulty"])
+        QMessageBox.information(self, "Done",
+                                f"Your transaction is in State B.\nFinalized block {fin['block_hash'][:16]}...")
 
-    def open_wizard(self):
-        from pasta.frontends.desktop.widgets.wizard import TransactionWizard
-        wizard = TransactionWizard(self.node, self)
-        wizard.exec()
+    def verify_chain(self):
+        from PySide6.QtWidgets import QMessageBox
+        problems = self.node.verify()
+        if problems:
+            QMessageBox.warning(self, "Chain problems", "\n".join(problems))
+        else:
+            QMessageBox.information(self, "Chain OK", f"{len(self.node.get_blockchain())} blocks verified.")
 
     def check_balance_dialog(self):
-        from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QMessageBox
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QMessageBox
         dlg = QDialog(self)
         dlg.setWindowTitle("Check Balance")
         form = QFormLayout(dlg)
         addr_edit = QLineEdit()
-        form.addRow("Public address", addr_edit)
+        form.addRow("Address", addr_edit)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         form.addWidget(buttons)
         buttons.accepted.connect(dlg.accept)
@@ -129,28 +137,17 @@ class MainWindow(QMainWindow):
             if not address:
                 QMessageBox.warning(self, "Missing", "Please enter an address")
                 return
-            # Compute balance by scanning blockchain
-            chain = self.node.get_blockchain()
-            bal = 0.0
-            for blk in chain:
-                if blk.get("receiver_address") == address:
-                    bal += float(blk.get("amount", 0.0))
-                if blk.get("sender_address") == address and blk.get("sender_address") != "GENESIS":
-                    bal -= float(blk.get("amount", 0.0))
-            QMessageBox.information(self, "Balance", f"Balance for {address[:10]}…: {bal} PASTA")
+            bal = self.node.balance_for(address)
+            pending = self.node.pending_outgoing(address)
+            QMessageBox.information(self, "Balance",
+                                    f"{address[:12]}...: {bal} PASTA (pending outgoing {pending})")
 
 
 def main() -> None:  # pragma: no cover
     app = QApplication(sys.argv)
-
-    node = Node()  # In-process node
+    node = Node(os.environ.get("PASTA_STORAGE") or None)
     window = MainWindow(node)
     window.show()
-
-    # Optionally also start REST server on localhost:5000 so other tools can talk to it
-    # Commented out for now to avoid blocking UI thread; will be moved to background thread later.
-    # threading.Thread(target=node.start_rest_server, daemon=True).start()
-
     sys.exit(app.exec())
 
 

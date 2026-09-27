@@ -110,11 +110,16 @@ Build the Windows executable (output in `dist/`, not committed):
 
 ### Transaction life-cycle in the prototype
 
-1. Generate two keypairs (CLI option 1). The public key is the address.
-2. Create a transaction (option 2). It enters the mempool in **State A**.
-3. Validate another mempool transaction with yours (option 7). Yours moves to **State B**; the
-   transaction you validated is finalized to **State C** and appended to the blockchain.
-4. Check the blockchain and balances (options 4 and 5).
+1. Generate two keypairs (CLI option 1). The public key is the address; the private key never
+   leaves the client.
+2. Send a transaction (option 2). The CLI signs the canonical payload locally; the node verifies
+   the signature and the sender's balance, then admits it to the mempool in **State A**.
+3. Validate (option 6): pick your State A transaction and a State B target from a *different*
+   sender. Yours moves to **State B**; the target is finalized to **State C** with you recorded
+   as validator, proof-of-work is mined, and it is appended to the blockchain.
+4. Check the blockchain, balances and chain integrity (options 4, 5 and 7).
+
+The rules the node enforces are written down in [`docs/SPEC.md`](docs/SPEC.md).
 
 The genesis block starts in State C and a bootstrap transaction sits in the mempool in State B
 so that the first real transaction has something to validate.

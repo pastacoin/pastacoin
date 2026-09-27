@@ -1,417 +1,172 @@
+"""Interactive REST client for a PaSta node.
+
+The CLI never sends a private key anywhere: it signs the canonical payload locally and
+posts ``sender, receiver, amount, timestamp, signature`` to the node.
+"""
+from __future__ import annotations
+
+import argparse
 import json
-# import os # No longer needed for direct file access
 import time
-import hashlib
-import ecdsa
-import base58
-import random
-import requests # Added
-import argparse # Added
-from typing import Optional, List, Dict, Tuple
+from typing import Any, Dict, List, Optional
 
-# NETWORK_PATH = "C:\\PastaNetwork" # No longer needed
+import requests
 
-# def ensure_network_dirs(): # Removed
-#     """Ensure network directories exist"""
-#     if not os.path.exists(NETWORK_PATH):
-#         os.makedirs(NETWORK_PATH)
+from pasta.core.crypto import generate_keypair, public_key_for, sign_transaction
 
-# def load_json(filename: str, default): # Removed
-#     filepath = os.path.join(NETWORK_PATH, filename)
-#     if os.path.exists(filepath):
-#         with open(filepath, 'r') as f:
-#             return json.load(f)
-#     return default
 
-# def save_json(filename: str, data): # Removed
-#     filepath = os.path.join(NETWORK_PATH, filename)
-#     with open(filepath, 'w') as f:
-#         json.dump(data, f, indent=2)
+class NodeClient:
+    def __init__(self, base_url: str):
+        self.base = base_url.rstrip("/")
 
-def get_node_blockchain(node_address: str) -> List[Dict]:
-    """Fetches the current blockchain from the node."""
+    # ---- helpers
+    def _get(self, path: str) -> Any:
+        r = requests.get(f"{self.base}{path}", timeout=10)
+        return self._unwrap(r)
+
+    def _post(self, path: str, body: Dict[str, Any]) -> Any:
+        r = requests.post(f"{self.base}{path}", json=body, timeout=600)
+        return self._unwrap(r)
+
+    @staticmethod
+    def _unwrap(r: requests.Response) -> Any:
+        try:
+            data = r.json()
+        except ValueError:
+            data = {"error": r.text}
+        if r.status_code >= 400:
+            raise RuntimeError(f"node said {r.status_code}: {data.get('error', data)}")
+        return data
+
+    # ---- API
+    def status(self): return self._get("/status")
+    def blockchain(self) -> List[Dict]: return self._get("/blockchain")
+    def mempool(self) -> List[Dict]: return self._get("/mempool")
+    def balance(self, address: str): return self._get(f"/balance/{address}")
+    def verify(self): return self._get("/verify")
+
+    def send(self, private_key: str, receiver: str, amount: float) -> Dict:
+        sender = public_key_for(private_key)
+        ts = int(time.time())
+        sig = sign_transaction(private_key, sender, receiver, amount, ts)
+        return self._post("/create_transaction", {
+            "sender": sender, "receiver": receiver, "amount": amount, "timestamp": ts, "signature": sig,
+        })
+
+    def validate(self, my_tx_id: str, target_tx_id: str) -> Dict:
+        return self._post("/validate", {"my_tx_id": my_tx_id, "target_tx_id": target_tx_id})
+
+
+# ---------------------------------------------------------------- UI ----
+
+def short(s: Optional[str], n: int = 10) -> str:
+    return (s or "")[:n]
+
+
+def print_mempool(mempool: List[Dict]) -> None:
+    if not mempool:
+        print("Mempool is empty.")
+        return
+    print(f"{'#':>2}  {'tx_id':<12} {'state':<5} {'sender':<12} {'receiver':<12} {'amount':>10} {'mint':>8}")
+    for i, tx in enumerate(mempool):
+        print(f"{i:>2}  {short(tx['tx_id'], 12):<12} {tx['state']:<5} {short(tx['sender_address'], 12):<12} "
+              f"{short(tx['receiver_address'], 12):<12} {tx['amount']:>10.4f} {tx.get('mint_amount', 0):>8.3f}")
+
+
+def print_chain(chain: List[Dict]) -> None:
+    print(f"{'h':>3}  {'hash':<12} {'sender':<12} {'receiver':<12} {'amount':>10} {'mint':>8} {'validator':<12}")
+    for h, b in enumerate(chain):
+        print(f"{h:>3}  {short(b.get('block_hash'), 12):<12} {short(b['sender_address'], 12):<12} "
+              f"{short(b['receiver_address'], 12):<12} {b['amount']:>10.4f} {b.get('mint_amount', 0):>8.3f} "
+              f"{short(b.get('validator_address'), 12):<12}")
+
+
+def pick(mempool: List[Dict], prompt: str, allowed_states: set) -> Optional[Dict]:
+    options = [tx for tx in mempool if tx["state"] in allowed_states]
+    if not options:
+        print(f"No mempool transactions in state {sorted(allowed_states)}.")
+        return None
+    print_mempool(options)
+    raw = input(f"{prompt} (row number, blank to cancel): ").strip()
+    if not raw:
+        return None
     try:
-        response = requests.get(f"{node_address}/blockchain")
-        response.raise_for_status() # Raise exception for bad status codes
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching blockchain from {node_address}: {e}")
-        return []
-
-def get_node_mempool(node_address: str) -> List[Dict]:
-    """Fetches the current mempool from the node."""
-    try:
-        response = requests.get(f"{node_address}/mempool")
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching mempool from {node_address}: {e}")
-        return []
-
-def post_transaction_to_node(node_address: str, transaction: Dict) -> bool:
-    """Posts a new transaction to the node (State-A)."""
-
-
-    """Posts a new transaction to the node's mempool."""
-    try:
-        response = requests.post(f"{node_address}/create_transaction", json=transaction)
-        response.raise_for_status()
-        print(f"Node response ({response.status_code}): {response.json().get('message')}")
-        return response.status_code == 201 # Check if created
-    except requests.exceptions.RequestException as e:
-        print(f"Error posting transaction to {node_address}: {e}")
-        if e.response is not None:
-            try:
-                print(f"Node error ({e.response.status_code}): {e.response.json().get('message')}")
-            except json.JSONDecodeError:
-                print(f"Node error ({e.response.status_code}): {e.response.text}")
-        return False
-
-def get_balance(address: str, blockchain: List[Dict]) -> float:
-    """Calculate balance for an address from blockchain (matches Node schema)."""
-    balance = 0.0
-    for block in blockchain:
-        recv = block.get("receiver_address")
-        send = block.get("sender_address")
-        amt = float(block.get("amount", 0.0))
-        if recv == address:
-            balance += amt
-        if send == address and send != "GENESIS":
-            balance -= amt
-    return balance
-
-# Removed functions that relied on direct file access and complex block creation:
-# find_chain_ends, find_available_end, find_bifurcation_point, create_transaction_block
-
-# --- Simplified Transaction Creation ---
-# The node will handle adding predecessor, layer, etc., when it mines/validates blocks.
-# The CLI just creates the core transaction data.
-
-def create_core_transaction(
-    sender: str,
-    receiver: str,
-    amount: float,
-    private_key_str: str
-) -> Optional[Dict]:
-    """Creates the core transaction data and signs it."""
-    try:
-        timestamp = time.time()
-        signature = sign_transaction(private_key_str, sender, receiver, amount, timestamp)
-
-        transaction = {
-            # Core transaction data
-            "sender": sender,
-            "receiver": receiver,
-            "amount": amount,
-            "timestamp": timestamp,
-            "signature": signature,
-            
-            # State tracking
-            "state": "A",  # Initial state
-            
-            # Hash fields for different states
-            "hash_a": None,  # Will be calculated by node
-            "hash_b": None,  # Will be set when validating another block
-            "hash_c": None,  # Will be set when this block is validated
-            
-            # Validation metadata
-            "validated_block": None,  # ID of the block this transaction will validate
-            "validated_by": None,     # ID of the block that validates this transaction
-            
-            # Predecessor information
-            "predecessor_index": None,  # Will be set by node to latest block
-            "predecessor_hash": None,   # Will be set by node
-        }
-
-        # Verify the signature locally before sending
-        if verify_signature(transaction):
-            print("\nLocal signature verified successfully before sending.")
-            return transaction
-        else:
-            print("\nError: Local signature verification failed! Transaction not sent.")
-            return None
-    except Exception as e:
-        print(f"\nError creating core transaction: {e}")
+        return options[int(raw)]
+    except (ValueError, IndexError):
+        print("Invalid row.")
         return None
 
-def verify_signature(transaction: dict) -> bool:
-    """Verify that a transaction's signature is valid"""
-    try:
-        public_key_bytes = base58.b58decode(transaction['sender'])
-        verifying_key = ecdsa.VerifyingKey.from_string(public_key_bytes, curve=ecdsa.SECP256k1)
-        
-        # Recreate the message that was signed
-        message = f"{transaction['sender']}{transaction['receiver']}{transaction['amount']}{transaction['timestamp']}"
-        
-        signature = base58.b58decode(transaction['signature'])
-        return verifying_key.verify(signature, message.encode())
-    except Exception as e:
-        print(f"Verification error: {e}")
-        return False
 
-def sign_transaction(private_key_str: str, sender: str, receiver: str, amount: float, timestamp: float) -> str:
-    """Sign transaction data and return the signature"""
-    private_key_bytes = base58.b58decode(private_key_str)
-    signing_key = ecdsa.SigningKey.from_string(private_key_bytes, curve=ecdsa.SECP256k1)
-    
-    message = f"{sender}{receiver}{amount}{timestamp}"
-    signature = signing_key.sign(message.encode())
-    return base58.b58encode(signature).decode()
-
-def generate_keypair() -> tuple:
-    """Generate a new ECDSA keypair and return base58 encoded strings"""
-    private_key = ecdsa.SigningKey.generate(curve=ecdsa.SECP256k1)
-    public_key = private_key.get_verifying_key()
-    
-    private_key_str = base58.b58encode(private_key.to_string()).decode()
-    public_key_str = base58.b58encode(public_key.to_string()).decode()
-    
-    return private_key_str, public_key_str
-
-def mint_burn_test():
-    """Test function for mint/burn operations that generates a random number between 0.1 and 1"""
-    random_amount = round(random.uniform(0.1, 1.0), 2)
-    print(f"\nGenerated random amount for testing: {random_amount} PASTA")
-    return random_amount
-
-def advance_b_request(node_address: str, my_index: int, target_index: int) -> bool:
-    """Request the node to advance a transaction to State B."""
-    try:
-        payload = {"my_index": my_index, "target_index": target_index}
-        response = requests.post(f"{node_address}/advance_b", json=payload)
-        response.raise_for_status()
-        print(f"Advance B response ({response.status_code}): {response.json().get('message')}")
-        return response.status_code == 200
-    except requests.exceptions.RequestException as e:
-        print(f"Error advancing to B on {node_address}: {e}")
-        return False
-
-
-def advance_c_request(node_address: str, target_index: int, validator: str) -> bool:
-    """Request the node to advance a transaction to State C and move it into the blockchain."""
-    try:
-        payload = {"target_index": target_index, "validator": validator}
-        response = requests.post(f"{node_address}/advance_c", json=payload)
-        response.raise_for_status()
-        print(f"Advance C response ({response.status_code}): {response.json().get('message')}")
-        return response.status_code == 200
-    except requests.exceptions.RequestException as e:
-        print(f"Error advancing to C on {node_address}: {e}")
-        return False
-
-
-def main_menu(node_address: str):
-    """Main CLI interface, interacting with a specific PastaNode."""
+def main_menu(client: NodeClient) -> None:
     while True:
-        print(f"\n--- Interacting with Node: {node_address} ---")
-        print("PaSta Transaction CLI:")
+        print(f"\n--- PaSta CLI @ {client.base} ---")
         print("1. Generate new keypair")
-        print("2. Create and Send transaction (State A)")
-        print("3. View Node Mempool")
-        print("4. View Node Blockchain")
-        print("5. Check Balance (from Node Blockchain)")
-        print("6. Test Mint/Burn (Local Concept)")
-        print("7. Advance Transaction to State B (Validate Another Block)")
-        print("8. Advance Transaction to State C (Get Validated)")
+        print("2. Send PASTA (creates a State A transaction)")
+        print("3. View mempool")
+        print("4. View blockchain")
+        print("5. Check balance")
+        print("6. Validate: move my transaction to State B by finalizing another (State C)")
+        print("7. Verify chain")
+        print("8. Node status")
         print("9. Exit")
-
-        choice = input("\nEnter your choice (1-9): ")
-
-        if choice == "1":
-            priv, pub = generate_keypair()
-            print("\nGenerated new keypair!")
-            print(f"Private key: {priv}")
-            print(f"Public key (address): {pub}")
-            print("\nSAVE THESE KEYS! The node does not store private keys.")
-
-        elif choice == "2":
-            # Get transaction details
-            private_key = input("Enter your private key: ")
-            sender = input("Enter your public key (sender address): ")
-            receiver = input("Enter receiver's public key: ")
-            try:
-                amount = float(input("Enter amount: "))
-                if amount <= 0:
-                    print("Amount must be positive.")
+        choice = input("Choice: ").strip()
+        try:
+            if choice == "1":
+                kp = generate_keypair()
+                print(f"\nPrivate key: {kp['private_key']}\nAddress:     {kp['public_key']}")
+                print("SAVE THESE. The node never sees the private key.")
+            elif choice == "2":
+                priv = input("Your private key: ").strip()
+                receiver = input("Receiver address: ").strip()
+                amount = float(input("Amount (0 = zero-value, may mint during bootstrap): ").strip() or "0")
+                res = client.send(priv, receiver, amount)
+                tx = res["tx"]
+                print(f"\n{res['message']}: tx_id {tx['tx_id']}  mint {tx['mint_amount']}")
+                print("Next: option 6 to validate another transaction and move yours to State B.")
+            elif choice == "3":
+                print_mempool(client.mempool())
+            elif choice == "4":
+                print_chain(client.blockchain())
+            elif choice == "5":
+                addr = input("Address: ").strip()
+                b = client.balance(addr)
+                print(f"Balance {b['balance']} PASTA (pending outgoing {b['pending_outgoing']})")
+            elif choice == "6":
+                mem = client.mempool()
+                mine = pick(mem, "Your State A transaction", {"A"})
+                if not mine:
                     continue
-            except ValueError:
-                print("Invalid amount.")
-                continue
-
-            # Create the core transaction data
-            core_transaction = create_core_transaction(sender, receiver, amount, private_key)
-
-            if core_transaction:
-                print("\nCore transaction created:")
-                print(json.dumps(core_transaction, indent=2))
-                # Post it to the node
-                print(f"\nSending transaction to node {node_address}...")
-                post_transaction_to_node(node_address, core_transaction)
-
-        elif choice == "3":
-            print(f"\nFetching mempool from {node_address}...")
-            mempool = get_node_mempool(node_address)
-            if mempool is None:
-                print("Failed to fetch mempool.")
-            elif not mempool:
-                print("Node Mempool is empty")
+                target = pick([t for t in mem if t["sender_address"] != mine["sender_address"]],
+                              "Eligible target (State B, different sender)", {"B"})
+                if not target:
+                    continue
+                print("Mining...")
+                res = client.validate(mine["tx_id"], target["tx_id"])
+                fin = res["finalized"]
+                print(f"\n{res['message']}.")
+                print(f"Finalized block hash {fin['block_hash']} (difficulty {fin['required_difficulty']})")
+            elif choice == "7":
+                v = client.verify()
+                print("Chain OK" if v["ok"] else "PROBLEMS:\n  " + "\n  ".join(v["problems"]))
+            elif choice == "8":
+                print(json.dumps(client.status(), indent=2))
+            elif choice == "9":
+                print("Goodbye!")
+                return
             else:
-                print("\nCurrent Node Mempool:")
-                print(json.dumps(mempool, indent=2))
+                print("Invalid choice.")
+        except (RuntimeError, ValueError, requests.RequestException) as exc:
+            print(f"Error: {exc}")
 
-        elif choice == "4":
-            print(f"\nFetching blockchain from {node_address}...")
-            blockchain = get_node_blockchain(node_address)
-            if blockchain is None:
-                print("Failed to fetch blockchain.")
-            elif not blockchain:
-                print("Node Blockchain is empty")
-            else:
-                print("\nCurrent Node Blockchain:")
-                print(json.dumps(blockchain, indent=2))
-
-        elif choice == "5":
-            address = input("Enter the public key (address) to check balance for: ")
-            print(f"\nFetching blockchain from {node_address} to calculate balance...")
-            blockchain = get_node_blockchain(node_address)
-            if blockchain is not None:
-                balance = get_balance(address, blockchain)
-                print(f"\nCalculated balance for {address[:8]}...: {balance} PASTA")
-            else:
-                print("Could not calculate balance as blockchain fetch failed.")
-
-        elif choice == "6":
-            print("\nTesting Mint/Burn functionality...")
-            amount = mint_burn_test()
-            print(f"This amount ({amount} PASTA) would be used for minting/burning in the real implementation")
-
-        elif choice == "7":
-            # Advance transaction to State B
-            print("\nAdvancing transaction to State B (Validate Another Block)")
-            print("First, let's view the mempool to select a transaction:")
-            mempool = get_node_mempool(node_address)
-            if not mempool:
-                print("No transactions in mempool to validate.")
-                continue
-
-            print("\nAvailable transactions in mempool:")
-            for i, tx in enumerate(mempool):
-                print(f"{i}: {tx.get('signature')[:8]}... (State: {tx.get('state')})")
-
-            try:
-                tx_index = int(input("\nEnter the index of the transaction to validate: "))
-                if tx_index < 0 or tx_index >= len(mempool):
-                    print("Invalid transaction index.")
-                    continue
-
-                # Get the transaction to be validated
-                tx_to_validate = mempool[tx_index]
-                
-                # Create a new transaction that will validate the selected one
-                private_key = input("Enter your private key: ")
-                sender = input("Enter your public key (sender address): ")
-                receiver = input("Enter receiver's public key: ")
-                try:
-                    amount = float(input("Enter amount: "))
-                    if amount <= 0:
-                        print("Amount must be positive.")
-                        continue
-                except ValueError:
-                    print("Invalid amount.")
-                    continue
-
-                # Create the validating transaction
-                validating_tx = create_core_transaction(sender, receiver, amount, private_key)
-                if validating_tx:
-                    # Set it to state B and add validation metadata
-                    validating_tx['state'] = 'B'
-                    validating_tx['validated_block'] = tx_index
-                    
-                    print("\nValidating transaction created:")
-                    print(json.dumps(validating_tx, indent=2))
-                    print(f"\nSending validating transaction to node {node_address}...")
-                    success = post_transaction_to_node(node_address, validating_tx)
-                    if success:
-                        mem_after = get_node_mempool(node_address)
-                        my_idx = len(mem_after) - 1  # our tx should be last
-                        print(f"\nRequesting node to advance transaction {my_idx} → State B (target {tx_index})...")
-                        advance_b_request(node_address, my_idx, tx_index)
-
-            except ValueError:
-                print("Invalid input. Please enter a number.")
-
-        elif choice == "8":
-            # Advance transaction to State C
-            print("\nAdvancing transaction to State C (Get Validated)")
-            print("First, let's view the mempool to select a transaction:")
-            mempool = get_node_mempool(node_address)
-            if not mempool:
-                print("No transactions in mempool to validate.")
-                continue
-
-            print("\nAvailable transactions in mempool:")
-            for i, tx in enumerate(mempool):
-                print(f"{i}: {tx.get('signature')[:8]}... (State: {tx.get('state')})")
-
-            try:
-                tx_index = int(input("\nEnter the index of the transaction to be validated: "))
-                if tx_index < 0 or tx_index >= len(mempool):
-                    print("Invalid transaction index.")
-                    continue
-
-                # Get the transaction to be validated
-                tx_to_validate = mempool[tx_index]
-                
-                # Create a new transaction that will validate the selected one
-                private_key = input("Enter your private key: ")
-                sender = input("Enter your public key (sender address): ")
-                receiver = input("Enter receiver's public key: ")
-                try:
-                    amount = float(input("Enter amount: "))
-                    if amount <= 0:
-                        print("Amount must be positive.")
-                        continue
-                except ValueError:
-                    print("Invalid amount.")
-                    continue
-
-                # Create the validating transaction
-                validating_tx = create_core_transaction(sender, receiver, amount, private_key)
-                if validating_tx:
-                    # Set it to state B and add validation metadata
-                    validating_tx['state'] = 'B'
-                    validating_tx['validated_block'] = tx_index  # still needed for proof
-                    
-                    print("\nValidating transaction created (proof-of-validation):")
-                    print(json.dumps(validating_tx, indent=2))
-                    print(f"\nSending validating transaction to node {node_address}...")
-                    if post_transaction_to_node(node_address, validating_tx):
-                        print(f"\nRequesting node to move transaction {tx_index} to State C (validator = {sender[:8]}...) ...")
-                        advance_c_request(node_address, tx_index, sender)
-
-            except ValueError:
-                print("Invalid input. Please enter a number.")
-
-        elif choice == "9":
-            print("Goodbye!")
-            break
-
-        else:
-            print("Invalid choice. Please try again.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='PastaCoin CLI Client')
-    parser.add_argument('--node', type=str, default='http://localhost:5000', help='Address of the PastaNode to connect to.')
+    parser = argparse.ArgumentParser(description="PaSta CLI client")
+    parser.add_argument("--node", default="http://localhost:5000", help="Node base URL")
     args = parser.parse_args()
-
-    print(f"Attempting to connect to PastaNode at: {args.node}")
-    # Quick check if node is reachable (optional)
+    client = NodeClient(args.node)
     try:
-        requests.get(f"{args.node}/blockchain", timeout=2) # Check if blockchain endpoint responds
-        print(f"Successfully connected to node at {args.node}.")
-    except requests.exceptions.RequestException as e:
-        print(f"Warning: Could not connect to node at {args.node}. CLI might not function correctly. Error: {e}")
-        # Decide if we should exit or let the user try anyway
-        # exit(1)
-
-    main_menu(args.node)
+        s = client.status()
+        print(f"Connected to {args.node}: height {s['height']}, mempool {s['mempool_size']}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: could not reach node at {args.node}: {exc}")
+    main_menu(client)
