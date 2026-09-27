@@ -36,7 +36,7 @@ of such days is reported per year (Dogecoin 2024: 57 %, Bitcoin Cash 2019: 69 %)
 | Litecoin | 2013 to 2026 | x20 | **-0.96** (r² 0.59) | **+0.04** (r² 0.00) | $114, $433 (2017), $154 | holds cleanly |
 | Dogecoin | 2014 to 2026 | x338 | -0.65 (r² 0.54) | +0.35 (r² 0.25) | $7, $432 (2021), $30 | holds loosely; conventions and dust distort |
 | Bitcoin Cash | 2018 to 2026 | x1 | -0.12 (r² 0.00) | +0.88 (r² 0.09) | $111, $133 (2024), $105 | no price range to test; dust-heavy |
-| Ethereum | 2016 to 2026 | x200 | median unusable | median unusable | mean: $309 to $1,741 (x5.6) | not a payments chain; see below |
+| Ethereum (plain ETH transfers >= 0.001 ETH) | 2016 to 2026 | x200 | -0.55 (r² 0.76) | +0.45 (r² 0.69) | $12, $243 (2021), $63 | half-tracks; not a payments chain, see below |
 
 Bitcoin yearly median transaction in USD, 2011 to 2026: 63, 20, 68, 110, 81, 138, 400, 400,
 232, 465, 795, 501, 99, 110, 177, 68. The mean over the same years went from $291 to
@@ -60,13 +60,16 @@ $118,659.
    and fell back to about $100 when they eased. When block space is scarce, small payments
    leave the chain and the median of what remains rises. A chain that is never full should
    see less of this; Litecoin, which never was, shows the flattest median.
-4. **Ethereum is a different animal.** Its median transfer value collapsed to near zero after
-   2018 because most transactions are contract calls carrying no ETH, and the money-like
-   activity moved into ERC-20 stablecoins that these statistics do not see. On the mean of
-   plain ETH transfers, the average transaction went from $309 to $1,741 (x5.6) while the
-   price rose 200x, elasticity of mean coins per transaction to price -0.58. That is a
-   platform's settlement layer, not a currency, and it says little about PaSta either way. A
-   filtered median (plain transfers of at least 0.001 ETH, via Blockchair) is queued.
+4. **Ethereum half-tracks, for structural reasons.** The unfiltered median is zero because most
+   transactions are contract calls carrying no ETH, so the analysis uses Blockchair's
+   aggregate over plain transfers of at least 0.001 ETH. That median went from $12 (2016) to
+   $100 (2017), fell to $24 to $61 through 2020, peaked at $243 in 2021 and ended at $63 in
+   2026: x5.4 in real terms while the price rose 200x. Elasticity of median ETH per transfer
+   to price is -0.55, so about half of a price rise shows up as smaller transfers and half as
+   larger real transfers. Plain ETH transfers are mostly exchange deposits and gas top-ups;
+   the payment activity lives in ERC-20 stablecoins that none of these statistics see. It is
+   a platform's settlement layer, not a currency, and its result sits between Bitcoin's mean
+   and Bitcoin's median for that reason.
 5. **Dust and conventions are the noise floor.** Inscription waves push daily medians toward
    zero; Dogecoin's median sat at exactly 10,000 DOGE for three years because of tipping
    habits. A live controller needs a dust floor and should expect step changes from
@@ -88,7 +91,6 @@ $118,659.
 
 ## Follow-ups
 
-- Filtered Ethereum median via Blockchair once the rate limit clears (`chains.fetch("eth")`
-  with `source="blockchair"`).
-- Blockchair medians for Bitcoin as a second source, for the same cross-check done on Litecoin.
+- Blockchair medians for Bitcoin as a second source, for the same cross-check done on
+  Litecoin (a single aggregate request re-triggered the rate limit on 2026-09-27).
 - Dust-filtered aggregates at fetch time (`q=output_total(10000..)`).
