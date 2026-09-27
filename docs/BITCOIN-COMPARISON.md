@@ -76,6 +76,17 @@ Elasticities (slope of log y on log x, monthly medians):
    transfers. A median from a full node would be the right statistic and is likely to show a
    cleaner relationship.
 
+## Update, same day: the median tells a different story
+
+`CHAINS-COMPARISON.md` repeats this analysis with the daily **median** transaction value
+(BitInfoCharts for Bitcoin, Blockchair for the other chains). The median Bitcoin transaction
+was worth $63 in 2011 and $68 in 2026, with a peak yearly median of $795 in 2021, across a
+23,000x price move. Elasticity of median BTC per transaction to price: -0.80 (r² 0.85). The
+150x rise in the *mean* documented above is real but is the signature of exchange and whale
+transfers, not of what a typical user moves. The conclusions below stand for the mean and are
+softened for the median: the gauge is usable if it is the median, and it is distorted mainly
+when fees price small payments off chain (2017 to 2022).
+
 ## What this means for PaSta
 
 - **Supported:** fixed supply plus a growing economy shrinks the coin size of transactions,

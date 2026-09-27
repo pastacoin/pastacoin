@@ -13,6 +13,10 @@ Sources (no API keys):
   with zero value but also ignores ERC-20 and stablecoin transfers.
 * **CoinMetrics community data** (GitHub CSV): price, circulating supply, transaction count,
   active addresses, total fees in native units, market cap.
+* **BitInfoCharts** comparison pages (``mediantransactionvalue-<coin>.html``,
+  ``transactionvalue-<coin>.html``): daily median and mean transaction value in USD, used for
+  Bitcoin because Blockchair rate-limits bulk pulls. Native values are USD divided by the
+  CoinMetrics price. Cross-checked on Litecoin against the Blockchair medians.
 
 ``fetch(chain)`` writes ``data/chains/<chain>-daily.csv``; those files are committed.
 """
@@ -23,6 +27,7 @@ import datetime as dt
 import io
 import json
 import os
+import re
 import urllib.request
 from dataclasses import dataclass
 from typing import Dict, List, Optional
@@ -46,13 +51,18 @@ class Chain:
     query: str = ""        # extra Blockchair filter, e.g. "&q=value(0.001..)"
     saturation_year: Optional[int] = None   # first year block space was persistently scarce
     supply_note: str = ""
+    source: str = "blockchair"              # "blockchair" or "bitinfocharts" for the value series
+    median_note: str = ""
+    median_usable: bool = True              # False when the available median is not a payments median
 
 
 CHAINS: Dict[str, Chain] = {
     "btc": Chain("btc", "Bitcoin", "btc", "bitcoin", "output_total", 1e8, 2011, saturation_year=2017,
-                 supply_note="capped at 21M; issuance halves every four years"),
+                 supply_note="capped at 21M; issuance halves every four years", source="bitinfocharts",
+                 median_note="median and mean transaction value from BitInfoCharts (USD), converted to BTC at the CoinMetrics daily price"),
     "eth": Chain("eth", "Ethereum", "eth", "ethereum", "value", 1e18, 2016, query="&q=value(0.001..)", saturation_year=2020,
-                 supply_note="no cap; issuance cut by the 2022 merge, fees burned since 2021"),
+                 supply_note="no cap; issuance cut by the 2022 merge, fees burned since 2021", source="bitinfocharts", median_usable=False,
+                 median_note="BitInfoCharts median (USD) exists only until 2019, when zero-value contract calls swamped it; the mean covers 2015 to 2026 and is diluted by those calls. A filtered median (plain transfers >= 0.001 ETH) needs Blockchair's rate-limited query; ERC-20 and stablecoin transfers are not counted anywhere here"),
     "ltc": Chain("ltc", "Litecoin", "ltc", "litecoin", "output_total", 1e8, 2012, saturation_year=None,
                  supply_note="capped at 84M; never capacity constrained"),
     "doge": Chain("doge", "Dogecoin", "doge", "dogecoin", "output_total", 1e8, 2014, saturation_year=None,
@@ -109,20 +119,65 @@ def fetch_coinmetrics(chain: Chain) -> Dict[dt.date, dict]:
     return out
 
 
+BITINFOCHARTS = "https://bitinfocharts.com/comparison/{metric}-{coin}.html"
+_BIC_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36"
+_BIC_POINT = re.compile(r'\[new Date\("(\d{4})/(\d{2})/(\d{2})"\),([^\]]*)\]')
+
+
+def parse_bitinfocharts(html: str) -> Dict[dt.date, Optional[float]]:
+    """Extract the daily series embedded in a BitInfoCharts comparison page."""
+    out: Dict[dt.date, Optional[float]] = {}
+    for y, m, d, v in _BIC_POINT.findall(html):
+        v = v.strip()
+        out[dt.date(int(y), int(m), int(d))] = None if v == "null" else float(v)
+    return out
+
+
+def fetch_bitinfocharts(chain: Chain, cm: Dict[dt.date, dict]) -> Dict[dt.date, dict]:
+    """Median and mean transaction value (USD) from BitInfoCharts, converted to native units."""
+    series = {}
+    for metric in ("mediantransactionvalue", "transactionvalue"):
+        req = urllib.request.Request(BITINFOCHARTS.format(metric=metric, coin=chain.symbol), headers={"User-Agent": _BIC_UA})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            series[metric] = parse_bitinfocharts(resp.read().decode("utf-8", "ignore"))
+    return join_bitinfocharts(series["mediantransactionvalue"], series["transactionvalue"], cm)
+
+
+def join_bitinfocharts(median_usd: Dict[dt.date, Optional[float]], mean_usd: Dict[dt.date, Optional[float]],
+                       cm: Dict[dt.date, dict]) -> Dict[dt.date, dict]:
+    out = {}
+    for d in set(median_usd) | set(mean_usd):
+        p = (cm.get(d) or {}).get("price_usd")
+        n = (cm.get(d) or {}).get("tx_count")
+        if not p:
+            continue
+        med, mean = median_usd.get(d), mean_usd.get(d)
+        rec = {"bc_tx_count": n, "bc_median_value": med / p if med is not None else None,
+               "bc_mean_value": mean / p if mean is not None else None}
+        rec["bc_sum_value"] = rec["bc_mean_value"] * n if rec["bc_mean_value"] is not None and n else None
+        if rec["bc_median_value"] is not None or rec["bc_mean_value"] is not None:
+            out[d] = rec
+    return out
+
+
 def fetch(chain_key: str) -> str:
     chain = CHAINS[chain_key]
-    bc = fetch_blockchair(chain)
     cm = fetch_coinmetrics(chain)
+    bc = fetch_bitinfocharts(chain, cm) if chain.source == "bitinfocharts" else fetch_blockchair(chain)
     days = sorted(set(bc) | set(cm))
     os.makedirs(DATA_DIR, exist_ok=True)
     path = csv_path(chain_key)
+    write_csv(path, days, cm, bc)
+    return path
+
+
+def write_csv(path: str, days, cm: Dict[dt.date, dict], bc: Dict[dt.date, dict]) -> None:
     with open(path, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(OUT_COLUMNS)
         for d in days:
             rec = {**cm.get(d, {}), **bc.get(d, {})}
             w.writerow([d.isoformat(), *["" if rec.get(k) is None else f"{rec[k]:.10g}" for k in OUT_COLUMNS[1:]]])
-    return path
 
 
 # ------------------------------------------------------------------- load ----
@@ -214,6 +269,7 @@ def summary(chain_key: str) -> dict:
     ratios = {k: (last[k] / first[k] if first.get(k) and last.get(k) else None) for k in METRIC_KEYS}
     return {
         "chain": chain.key, "name": chain.name, "symbol": chain.symbol.upper(), "supply_note": chain.supply_note,
+        "source": chain.source, "median_note": chain.median_note, "median_usable": chain.median_usable,
         "saturation_year": chain.saturation_year,
         "range": {"first_year": first["year"], "last_year": last["year"], "last_day": rows[-1]["date"].isoformat()},
         "monthly": [{k: (round(m[k], 8) if isinstance(m.get(k), float) else m.get(k)) for k in ["month", *METRIC_KEYS]} for m in mon],

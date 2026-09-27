@@ -32,7 +32,8 @@ def build_data() -> dict:
         s = ch.summary(key)
         mon = s["monthly"]
         nonzero = sum(1 for m in mon if m.get("median_tx_native"))
-        s["median_ok"] = nonzero >= 0.8 * len(mon) and bool(s["eras"][0].get("median_native_vs_price"))
+        s["median_months"] = nonzero
+        s["median_ok"] = s["median_usable"] and nonzero >= 24 and bool(s["eras"][0].get("median_native_vs_price"))
         s["color"] = CHAIN_COLORS.get(key, GRAY)
         chains.append(s)
     return {
