@@ -34,6 +34,8 @@ bottom of each section.
 | Experiment matrix | `pasta/sim/experiments.py` | The exact runs behind the figures and the public results page. | Live. |
 | Bitcoin comparison memo | `docs/BITCOIN-COMPARISON.md` | The whitepaper's Bitcoin chart rebuilt from public data and corrected (minted coins, change outputs, real transaction size, era split); what it supports and what it does not. | Live since 2026-09-27. |
 | Bitcoin daily dataset | `data/bitcoin-daily.csv` | Slim extract of the blockchain.com charts API, committed so the analysis runs offline. | Live; refresh with `python -m pasta.analysis.bitcoin_report --fetch`. |
+| Multi-chain comparison memo | `docs/CHAINS-COMPARISON.md` | The fixed-supply test repeated on Litecoin, Dogecoin, Bitcoin Cash, Ethereum (and Bitcoin medians) using median transaction size; dust filter; what holds and what does not. | Live since 2026-09-27. |
+| Chain daily datasets | `data/chains/<chain>-daily.csv` | Blockchair daily transfer aggregates joined to CoinMetrics community series, committed for offline runs. | Live; refresh with `python -m pasta.analysis.chains_report --fetch <chain>` (Blockchair rate limits: one chain per minute, and bulk pulls can trigger a temporary block). |
 | Simulator model notes | `pasta/sim/economy.py` module docstring | The economic model (quantity theory price level, shocks, what is measured). | Live. Change the docstring when the model changes. |
 | Controller definitions | `pasta/stability/controller.py` module docstring | The exact mint/burn rules under test. | Live. |
 
@@ -43,6 +45,7 @@ bottom of each section.
 |---|---|---|---|
 | Website | repo `pastacoin/pastacoin.github.io`, serves `pastacoin.org` | Landing page plus `/prototype/` web client. | Landing live; primary link now points to the results page. Prototype offline: its backend `pastacoin.onrender.com` is down and it posts private keys to the server. Phase 4. |
 | Bitcoin demonstration page | `pastacoin.org/results/bitcoin.html` (+ generated `results/bitcoin-data.js`) | Interactive version of the Bitcoin memo: toy model, raw and supply-adjusted transaction size, users scatter with fitted slope, USD size and fees, era table. | Live since 2026-09-27. |
+| Multi-chain page | `pastacoin.org/results/chains.html` (+ generated `results/chains-data.js`) | Interactive version of the multi-chain memo. | Live since 2026-09-27. |
 | Public results page | `pastacoin.org/results/` (`results/index.html` + generated `results/data.js` in the site repo) | Interactive charts of the simulation results with table views, limitations and reproduce commands. | Live since 2026-09-27. Regenerate `data.js` with `python -m pasta.sim.report --js ../pastacoin.github.io/results/data.js` and commit both repos. |
 
 ## Automation (planned)
