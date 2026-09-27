@@ -43,4 +43,5 @@ bottom of each section.
 
 | Document | Location | Purpose | Status |
 |---|---|---|---|
-| Perpetual improvement agent | `docs/AGENT.md` (planned) | Design for a remotely reachable agent with a daily scheduled run that reads this register and the status doc, picks the next backlog item, ships a PR, and updates the changelog. | Not started. Phase 5. |
+| Perpetual improvement agent | `docs/AGENT.md` | Design: Claude Code cloud routine, daily 06:00 Denver, one issue per run, PR only (never merges), guard rails, kill switch (`tools/agent/PAUSE`), dry-run mode, activation checklist. | Design written 2026-09-27 (#23). Not running; activation is #24 and needs owner steps (repo authorisation, email choice). |
+| Daily agent prompt | `tools/agent/daily_prompt.md` (planned) | The versioned prompt the routine runs; `MODE: dry-run` or `MODE: live`. | Not created; part of #24. |
