@@ -29,7 +29,9 @@ bottom of each section.
 | Claude working notes | `CLAUDE.md` | How to run, test, build, and talk to GitHub. Conventions. | Live. |
 | Package readmes | `pasta/readme.md`, `pasta/core/readme.md`, `pasta/validation/readme.md`, `pasta/network/readme.md` | Per-package intent. | Refreshed 2026-09-27. |
 | Legacy tools | `tools/legacy/README.md` | What the 2025 master-branch scripts did and which phase they inform. | Live. |
-| Simulation results memo | `docs/SIMULATION-RESULTS.md` (planned) | Findings from PastaTester on the stability controller and chain shape. Feeds back into whitepaper. | Not started. Phase 2 deliverable. |
+| Simulation results memo | `docs/SIMULATION-RESULTS.md` | Findings from PastaTester on the stability controller (and later chain shape). Feeds back into the whitepaper. | Live since 2026-09-27; first experiments on money-demand, volume, real-price and adoption shocks. Updated with every simulator PR. |
+| Simulator model notes | `pasta/sim/economy.py` module docstring | The economic model (quantity theory price level, shocks, what is measured). | Live. Change the docstring when the model changes. |
+| Controller definitions | `pasta/stability/controller.py` module docstring | The exact mint/burn rules under test. | Live. |
 
 ## Public surface
 
