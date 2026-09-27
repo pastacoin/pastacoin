@@ -1,13 +1,10 @@
 # `pasta.core`
 
-Pure, UI-agnostic primitives that define **what a block is** and the
-minimal cryptographic helpers required by the rest of the system.
+Pure primitives. Nothing here touches the network, disk or node state.
 
-Contents
---------
-* `models.py` – `TransactionBlock` dataclass + `create_genesis()` helper
-* `crypto.py`  – toy `generate_keypair()` built on *ecdsa* / *base58*
-
-Nothing in this folder touches the network or disk; that makes it trivial
-to unit-test and safe to reuse in any environment (desktop app, server,
-scripts, etc.).
+* `models.py` - `TransactionBlock` dataclass (one transaction = one block), `create_genesis()`,
+  `from_dict()` tolerant of unknown keys, `compute_hash()` content hash.
+* `crypto.py` - secp256k1 keypairs, the **canonical payload**, `compute_tx_id`,
+  `sign_transaction` / `verify_transaction` (SHA-256). Every client and the node import the
+  payload format from here so they cannot drift apart.
+* `errors.py` - `PastaError` hierarchy the node raises and front-ends display.

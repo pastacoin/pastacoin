@@ -1,112 +1,52 @@
 from __future__ import annotations
 
-from typing import Optional
+import time
 
-from PySide6.QtWidgets import (
-    QWizard, QWizardPage, QVBoxLayout, QLabel, QLineEdit, QFormLayout, QPushButton, QMessageBox
-)
 from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QFormLayout, QLineEdit, QMessageBox, QWizard, QWizardPage
 
-from pasta import Node, generate_keypair
-from pasta.core.crypto import sign_message
-
-
-class ActionPage(QWizardPage):
-    def __init__(self) -> None:
-        super().__init__()
-        self.setTitle("Choose Action")
-        self.choice: Optional[str] = None
-
-        layout = QVBoxLayout()
-        self.send_btn = QPushButton("Send PASTA (State A)")
-        self.validate_b_btn = QPushButton("Validate Block (State B)")
-        self.validate_c_btn = QPushButton("Finalize Block (State C)")
-        layout.addWidget(self.send_btn)
-        layout.addWidget(self.validate_b_btn)
-        layout.addWidget(self.validate_c_btn)
-        self.setLayout(layout)
-
-        self.send_btn.clicked.connect(lambda: self._select("A"))
-        self.validate_b_btn.clicked.connect(lambda: self._select("B"))
-        self.validate_c_btn.clicked.connect(lambda: self._select("C"))
-
-    def _select(self, action: str):
-        self.choice = action
-        self.completeChanged.emit()
-
-    def isComplete(self) -> bool:  # noqa: D401 override
-        return self.choice is not None
+from pasta import Node, PastaError
+from pasta.core.crypto import public_key_for, sign_transaction
 
 
 class DetailsPage(QWizardPage):
     def __init__(self):
         super().__init__()
-        self.setTitle("Enter Transaction Details")
-        self.sender_edit = QLineEdit()
+        self.setTitle("Transaction details")
+        self.setSubTitle("The sender address is derived from the private key on the next page.")
         self.receiver_edit = QLineEdit()
         self.amount_edit = QLineEdit()
-
+        self.amount_edit.setPlaceholderText("0 = zero-value (may mint during bootstrap)")
         form = QFormLayout()
-        form.addRow("Sender (public key)", self.sender_edit)
-        form.addRow("Receiver (public key)", self.receiver_edit)
-        form.addRow("Amount (blank = 0)", self.amount_edit)
+        form.addRow("Receiver address", self.receiver_edit)
+        form.addRow("Amount", self.amount_edit)
         self.setLayout(form)
-
-        # Re-evaluation of completeness when a field changes
-        for widget in (self.sender_edit, self.receiver_edit, self.amount_edit):
+        for widget in (self.receiver_edit, self.amount_edit):
             widget.textChanged.connect(self.completeChanged)
 
-    def isComplete(self):  # noqa: D401
-        # A transaction is valid for creation if sender and receiver are filled.
-        # Amount can be empty (treated as 0) or any non-negative number so that
-        # developers can experiment with the zero-value minting path.
-        if not self.sender_edit.text().strip() or not self.receiver_edit.text().strip():
-            return False
+    def amount(self) -> float:
+        txt = self.amount_edit.text().strip()
+        return float(txt) if txt else 0.0
 
-        amount_txt = self.amount_edit.text().strip()
-        if not amount_txt:
-            return True  # empty → interpreted as 0
+    def isComplete(self):  # noqa: D401
+        if not self.receiver_edit.text().strip():
+            return False
         try:
-            return float(amount_txt) >= 0
+            return self.amount() >= 0
         except ValueError:
             return False
-
-
-class SummaryPage(QWizardPage):
-    def __init__(self, node: Node):
-        super().__init__()
-        self.setTitle("Review & Submit")
-        self.node = node
-        self.label = QLabel()
-        self.setLayout(QVBoxLayout())
-        self.layout().addWidget(self.label)
-
-    def initializePage(self):
-        sender = self.wizard().details_page.sender_edit.text()
-        receiver = self.wizard().details_page.receiver_edit.text()
-        amount = self.wizard().details_page.amount_edit.text()
-        self.label.setText(f"Send {amount} PASTA from {sender[:8]}... to {receiver[:8]}...")
-
-    def validatePage(self):
-        # For now, just create State A transaction
-        sender = self.wizard().details_page.sender_edit.text()
-        receiver = self.wizard().details_page.receiver_edit.text()
-        amount = float(self.wizard().details_page.amount_edit.text())
-        tx = self.node.create_transaction(sender, receiver, amount)
-        print("Transaction sent:", tx)
-        return True
 
 
 class PrivateKeyPage(QWizardPage):
     def __init__(self):
         super().__init__()
-        self.setTitle("Sign Transaction")
+        self.setTitle("Sign")
+        self.setSubTitle("Your private key never leaves this machine; only the signature is stored.")
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.PasswordEchoOnEdit)
         layout = QFormLayout()
         layout.addRow("Sender private key", self.key_edit)
         self.setLayout(layout)
-        # Ensure the wizard re-evaluates completeness as the user types
         self.key_edit.textChanged.connect(self.completeChanged)
 
     def isComplete(self):  # noqa: D401
@@ -119,75 +59,41 @@ class TransactionWizard(QWizard):
     def __init__(self, node: Node, parent=None):
         super().__init__(parent)
         self.node = node
-
         self.details_page = DetailsPage()
         self.sign_page = PrivateKeyPage()
         self.addPage(self.details_page)
         self.addPage(self.sign_page)
-
         self.setWindowTitle("New Transaction")
-        # Rename default "Finish" button to clearer action label.
-        self.setButtonText(QWizard.FinishButton, "Create")
+        self.setButtonText(QWizard.FinishButton, "Sign and submit")
         self.finished.connect(lambda _: self.finished_signal.emit())
 
     def accept(self):
-        # build tx upon Finish
-        sender = self.details_page.sender_edit.text()
-        receiver = self.details_page.receiver_edit.text()
-        # Validate and build transaction when the user clicks Create
-        amount_txt = self.details_page.amount_edit.text().strip()
-        if not sender or not receiver:
-            QMessageBox.critical(self, "Incomplete", "Sender and Receiver must be provided.")
-            return
+        receiver = self.details_page.receiver_edit.text().strip()
         try:
-            amount = float(amount_txt) if amount_txt else 0.0
-            if amount < 0:
-                raise ValueError()
+            amount = self.details_page.amount()
         except ValueError:
-            QMessageBox.critical(self, "Invalid amount", "Amount must be a non-negative number or left blank.")
+            QMessageBox.critical(self, "Invalid amount", "Amount must be a non-negative number or blank.")
             return
-
+        priv = self.sign_page.key_edit.text().strip()
         try:
-            tx = self.node.create_transaction(sender, receiver, amount)
-        except Exception as exc:  # Catch any backend errors and surface them
-            QMessageBox.critical(self, "Transaction error", str(exc))
+            sender = public_key_for(priv)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Bad private key", str(exc))
             return
-
-        # --- Signing -----------------------------------------------------
-        priv_key = self.sign_page.key_edit.text().strip()
-        if priv_key:
-            msg = str(sorted(tx.items()))  # simple canonical representation
-            try:
-                sig = sign_message(priv_key, msg)
-                tx["signature"] = sig  # same dict reference stored in node
-            except Exception as exc:
-                QMessageBox.critical(self, "Signing failed", str(exc))
-                return
-
-        # Immediately progress to State B by validating the earliest mempool entry (typically genesis)
+        ts = int(time.time())
         try:
-            # After creation, our tx is the last in mempool
-            mempool = self.node.get_mempool()
-            my_index = len(mempool) - 1
-            if len(mempool) > 1:
-                target_index = 0
-                self.node.advance_b(my_index, target_index)
-                from PySide6.QtWidgets import QMessageBox
-                QMessageBox.information(
-                    self,
-                    "Transaction Created",
-                    "Your transaction is now in mempool (State B). A pending bootstrap transaction was finalized onto the blockchain.",
-                )
-            else:
-                from PySide6.QtWidgets import QMessageBox
-                QMessageBox.information(
-                    self,
-                    "Transaction Created",
-                    "Your transaction is in mempool (State A). No available target to advance to B yet.",
-                )
-        except Exception as exc:
-            # Non-fatal; allow creation even if auto-advance fails
-            QMessageBox.warning(self, "Advance to B failed", str(exc))
-
-        print("Created tx (signed and advanced to B):", tx)
+            sig = sign_transaction(priv, sender, receiver, amount, ts)
+            tx = self.node.create_transaction(sender, receiver, amount, timestamp=ts, signature=sig)
+        except PastaError as exc:
+            QMessageBox.critical(self, "Rejected by node", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Error", str(exc))
+            return
+        QMessageBox.information(
+            self,
+            "Transaction created",
+            f"State A. tx_id {tx['tx_id'][:16]}...\nMint: {tx['mint_amount']}\n\n"
+            "Use Transactions > Validate to move it to State B.",
+        )
         super().accept()

@@ -39,6 +39,9 @@ Work on a branch, open a PR, let the `tests` workflow pass, then merge.
 ## Conventions
 
 - Keep `pasta/` UI-agnostic; frontends import `Node` only.
-- Engine functions take an explicit `prefix` difficulty argument; the Node decides difficulty per level.
+- `pasta/validation/engine.py` performs transitions; `Node` decides whether they are allowed. Keep it that way.
+- The canonical signed payload lives only in `pasta/core/crypto.py`; every client imports it.
+- Mempool entries are addressed by `tx_id`, never by list index.
+- Rules that the code enforces are written down in `docs/SPEC.md`; change both together.
 - Do not commit `build/`, `dist/`, `__pycache__`, `*.egg-info` (see `.gitignore`).
-- Signatures, balances and chain verification are NOT enforced by the node yet. See STATUS doc before "fixing" behavior that is intentionally stubbed.
+- The bootstrap mint (zero-value tx mints toward a 10 PASTA average) is a placeholder for the Phase 2 controller; do not "fix" it in isolation.

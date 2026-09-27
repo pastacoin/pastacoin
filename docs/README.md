@@ -10,7 +10,7 @@ bottom of each section.
 |---|---|---|---|
 | PaSta Description (whitepaper) | Google Drive, folder "19 PaSta Coin (2024)", file id `16TWRU0hxGe5E3mB4EnAzSYjfOsMuH8AT` | Defines the three mechanisms: passive stability, dynamic chain, user-based validation. Contains diagrams (validation token, storage proof, bifurcation) that exist only as images in the .docx. | Working draft, last edited 2025-08-12. Authoritative until a technical spec exists. |
 | Covacoco (2017) and Nano-C (2018) | Drive, subfolder "Covacoco + Nano-C lineage (superseded by PaSta)" | Ancestor designs. Nano-C's mint/burn-during-transaction idea survives in PaSta. | Superseded. Reference only. |
-| Technical specification | `docs/SPEC.md` (planned) | Precise rules a node must follow: payload formats, hashing, state machine, validation, difficulty, chain rules. Derived from whitepaper plus Phase 1 to 3 decisions. | Not started. Phase 4 deliverable, but grows incrementally from Phase 1 onward. |
+| Technical specification | `docs/SPEC.md` | Precise rules a node follows today: canonical payload, tx_id, block fields, state machine, PoW, genesis, balances, mint placeholder, difficulty, verification, REST API, persistence. | Live draft since 2026-09-27 (Phase 1 rules). Grows each phase; completed in Phase 4. |
 
 ## Project management
 
@@ -27,7 +27,7 @@ bottom of each section.
 |---|---|---|---|
 | README | `README.md` | Public description, quick start, current status. | Live. |
 | Claude working notes | `CLAUDE.md` | How to run, test, build, and talk to GitHub. Conventions. | Live. |
-| Package readmes | `pasta/readme.md`, `pasta/core/readme.md`, `pasta/validation/readme.md`, `pasta/network/readme.md` | Per-package intent. | Partly stale. Refresh during Phase 1. |
+| Package readmes | `pasta/readme.md`, `pasta/core/readme.md`, `pasta/validation/readme.md`, `pasta/network/readme.md` | Per-package intent. | Refreshed 2026-09-27. |
 | Legacy tools | `tools/legacy/README.md` | What the 2025 master-branch scripts did and which phase they inform. | Live. |
 | Simulation results memo | `docs/SIMULATION-RESULTS.md` (planned) | Findings from PastaTester on the stability controller and chain shape. Feeds back into whitepaper. | Not started. Phase 2 deliverable. |
 
