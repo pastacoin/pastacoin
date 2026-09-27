@@ -11,6 +11,7 @@ Current project status and roadmap: `docs/STATUS-2026-09-26.md`. Register of eve
 - Package is installed editable (`pip install -e ".[dev,gui]"`, config in `pyproject.toml`): `from pasta import Node` works from anywhere in the venv.
 - Run tests: `.venv/Scripts/python -m pytest -q`
 - Run REST node: `.venv/Scripts/python node.py` (port 5000) then `.venv/Scripts/python pasta-cli.py --node http://localhost:5000`
+- Run simulator: `.venv/Scripts/python -m pasta.sim --compare --shock 2000:money_demand:1.5`
 - Run desktop GUI: `.venv/Scripts/python -m pasta.frontends.desktop`
 - Build Windows exe: `pyinstaller PastaMachine.spec` (output in `dist/`, ignored by git)
 
@@ -30,6 +31,8 @@ Work on a branch, open a PR, let the `tests` workflow pass, then merge.
     pasta/validation  State A -> B -> C engine with toy PoW (mine_pow, prefix param)
     pasta/node        Node: in-memory blockchain + mempool, minting, difficulty retarget, Flask app
     pasta/network     Legacy thin wrapper around Node.create_flask_app
+    pasta/stability   mint/burn controllers (pure policy objects), shared by sim and (later) Node
+    pasta/sim         PastaTester agent-based economy; python -m pasta.sim --help
     pasta/frontends   PySide6 desktop GUI ("The Pasta Machine")
     pasta-cli.py      Interactive REST client
     tests/            pytest
