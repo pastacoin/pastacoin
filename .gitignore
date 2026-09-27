@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# PyInstaller output (rebuild with: pyinstaller PastaMachine.spec)
+build/
+dist/
+
+# Local state
+*.log
+.env

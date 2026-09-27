@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pastacoin"
+version = "0.2.0"
+description = "PaSta: experimental passively stable cryptocurrency prototype"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE.txt" }
+authors = [{ name = "Leidi" }]
+dependencies = [
+    "flask>=3.1,<4",
+    "flask-cors>=6,<7",
+    "requests>=2.32,<3",
+    "ecdsa>=0.19,<1",
+    "base58>=2.1,<3",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.6"]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pasta*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

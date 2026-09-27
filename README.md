@@ -1,6 +1,6 @@
 # PaSta Coin: Passively Stable Cryptocurrency
 
-PaSta is a novel blockchain architecture designed to create a practical, scalable cryptocurrency for everyday transactions. PaSta is a Proof-of-Work type cryptocurrency, relies on "longest chain" concensus rules and in many other additional ways relies heavily on learnings from the Bitcoin Blockchain. It addresses three fundamental challenges in current cryptocurrency systems: price stability, transaction throughput, and decentralized validation.
+PaSta is a novel blockchain architecture designed to create a practical, scalable cryptocurrency for everyday transactions. PaSta is a Proof-of-Work type cryptocurrency, relies on "longest chain" consensus rules and in many other additional ways relies heavily on learnings from the Bitcoin Blockchain. It addresses three fundamental challenges in current cryptocurrency systems: price stability, transaction throughput, and decentralized validation.
 
 A working draft of the whitepaper describing this project can be found here: https://docs.google.com/document/d/16TWRU0hxGe5E3mB4EnAzSYjfOsMuH8AT/edit?usp=sharing&ouid=113569012516612057458&rtpof=true&sd=true
 
@@ -27,7 +27,7 @@ Instead of relying on dedicated miners, PaSta distributes validation among netwo
 - Prior to a transaction block being eligible for validation the node must first validate other transactions
 - Once a block is eligible for validation other users must validate it
 - Transaction privileges are tied directly to blockchain storage contribution
-- Higher layer transactions (further from teh main chain, smaller block time) process quickly with minimal validation
+- Higher layer transactions (further from the main chain, smaller block time) process quickly with minimal validation
 - Number of validators scales perfectly with number of transactions (because the nodes executing transactions are also the validators)
 
 ## Core Components
@@ -59,18 +59,6 @@ Instead of relying on dedicated miners, PaSta distributes validation among netwo
 - Attack modeling
 - Performance testing
 
-### FakeChainMaker
-- Create fake theoretical blockchains
-- Integrate with PastaTester for simulation 
-
-## Technical Benefits
-
-- Truly decentralized: Validation distributed among users, no miners
-- Scalable: Validator availability naturally scales with transaction volume
-- Stable: Built-in mechanisms to maintain price stability
-- Efficient: Balance blocks optimize transaction history storage
-- Fast: Parallel processing enables high transaction throughput
-
 ## Design Philosophy
 
 PaSta is designed specifically as a medium of exchange rather than a store of value or investment vehicle. Its value is programmed to remain the same over time:
@@ -81,77 +69,67 @@ PaSta is designed specifically as a medium of exchange rather than a store of va
 
 ## Development Status
 
-This project is currently in the conceptual phase. Next steps include:
-- Developing detailed technical specifications
-- Creating proof-of-concept implementations
-- Establishing testing frameworks
-- Conducting security analysis
-- Building community support
+**Prototype, single node.** A Python package (`pasta/`) implements a `TransactionBlock` model,
+an in-memory node with the State A -> B -> C validation life-cycle and toy proof-of-work, a
+REST API, an interactive CLI, and a PySide6 desktop app ("The Pasta Machine").
 
-## Testing the System
+Most whitepaper mechanisms are not implemented yet (stability controller, chain bifurcation,
+balance blocks, storage proof, networking). The full gap table and the phased plan live in
+[`docs/STATUS-2026-09-26.md`](docs/STATUS-2026-09-26.md). Every document the work is done
+against is indexed in [`docs/README.md`](docs/README.md). The backlog is the GitHub issue list.
 
-### Prerequisites
-- Python 3.7 or higher
-- Required Python packages: `flask`, `requests`, `ecdsa`, `base58`
+## Quick Start
 
-Install dependencies:
+Requires Python 3.11 or 3.12.
+
 ```bash
-pip install flask requests ecdsa base58
+python -m venv .venv
+.venv/Scripts/pip install -e ".[dev,gui]"     # drop ",gui" if you do not need the desktop app
+.venv/Scripts/python -m pytest -q
 ```
 
-### Running the Test Environment
+Run the REST node and the CLI in two terminals:
 
-1. Start the Node:
 ```bash
-python node.py -p 5000
+.venv/Scripts/python node.py                                   # http://localhost:5000
+.venv/Scripts/python pasta-cli.py --node http://localhost:5000
 ```
 
-2. In a new terminal, start the CLI:
+Run the desktop app:
+
 ```bash
-python pasta-cli.py --node http://localhost:5000
+.venv/Scripts/python -m pasta.frontends.desktop
 ```
 
-### Testing Transaction Flow
+Build the Windows executable (output in `dist/`, not committed):
 
-1. Generate Addresses:
-   - In the CLI, choose option 1 to generate a new keypair
-   - Save both the private and public keys
-   - Generate at least 2 keypairs (for sender and receiver)
+```bash
+.venv/Scripts/pip install pyinstaller
+.venv/Scripts/pyinstaller PastaMachine.spec
+```
 
-2. Create Initial Transaction:
-   - Choose option 2 to create a transaction
-   - Enter the sender's private key
-   - Enter the sender's public key
-   - Enter the receiver's public key
-   - Enter an amount (e.g., 10.0)
-   - This creates a transaction in State A
+### Transaction life-cycle in the prototype
 
-3. View Transaction State:
-   - Choose option 3 to view the mempool
-   - Verify the transaction is in State A
+1. Generate two keypairs (CLI option 1). The public key is the address.
+2. Create a transaction (option 2). It enters the mempool in **State A**.
+3. Validate another mempool transaction with yours (option 7). Yours moves to **State B**; the
+   transaction you validated is finalized to **State C** and appended to the blockchain.
+4. Check the blockchain and balances (options 4 and 5).
 
-4. Advance to State B:
-   - Choose option 7
-   - Select the transaction to validate
-   - Create a new transaction that will validate the selected one
-   - This advances the first transaction to State B
+The genesis block starts in State C and a bootstrap transaction sits in the mempool in State B
+so that the first real transaction has something to validate.
 
-5. Advance to State C:
-   - Choose option 8
-   - Select the transaction to be validated
-   - Create a new transaction that will validate it
-   - This advances the transaction to State C
+## Repository Layout
 
-6. Verify Final State:
-   - Use option 4 to view the blockchain
-   - Use option 5 to check balances
-
-### Testing Notes
-- Each transaction must go through states A -> B -> C
-- State B requires validating another transaction
-- State C requires being validated by another transaction
-- The genesis block starts in State C
-- Hash synchronization occurs between states B and C
+```
+pasta/            installable package (core, validation, node, network, frontends)
+tests/            pytest suite
+tools/legacy/     2025 scripts kept for reference (fake chain generator, visualizer)
+docs/             status, plan, documentation register
+pasta-cli.py      REST client
+node.py           REST server entry point
+PastaMachine.spec PyInstaller spec for the desktop app
+```
 
 ## Contributing
 
@@ -162,7 +140,6 @@ While we're still in early stages, we welcome discussion and contributions from 
 - Network security
 - Economic modeling
 - User interface design
-
 
 ---
 *Note: This project is under active development. Features and specifications are subject to change as we refine the system architecture and implementation details.*
