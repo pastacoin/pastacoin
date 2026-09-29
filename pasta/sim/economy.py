@@ -39,9 +39,9 @@ Model
   - ``real_growth_per_step`` (config, not a shock) compounds the purchase rate every step:
     steady per-capita real growth, the scenario a growth allowance is meant for.
 
-Holders: an address holds if its balance is at least ``holder_fraction`` of the robust median
-payment (dust-filtered). Sybil dust addresses therefore do not count unless the attacker funds
-each of them with a real balance.
+Holders: an address holds if its balance is at least ``holder_fraction`` of the mean positive
+balance. This is independent of the price level (a hoarding shock does not change who counts),
+and sybil dust addresses do not count unless the attacker funds each with a real balance.
 
 Attackers buy a small stake (a few typical payments each) from the honest agents pro rata,
 so their presence does not change the money supply. ``attacker_gain`` in the metrics is the
@@ -93,7 +93,7 @@ class SimConfig:
     wash_tx_per_step: int = 10          # bounces per wash pair per step once a wash shock fires
     sybil_tx_per_step: int = 2          # tiny payments per sybil address per step once a sybil shock fires
     sybil_size: float = 0.01            # sybil payment as a fraction of a typical payment
-    holder_fraction: float = 0.5        # an address "holds" if its balance >= this x the robust median payment
+    holder_fraction: float = 0.1        # an address "holds" if its balance >= this x the mean positive balance
     dust_fraction: float = 0.05         # payments below this x the robust median are dust for the holder threshold
     real_growth_per_step: float = 0.0   # steady per-capita real growth: purchase rate compounds by this each step
 
@@ -284,8 +284,9 @@ class Economy:
         clean = [a for a in amounts if a >= floor] if floor > 0 else amounts
         if clean:
             self._robust_median = statistics.median(clean)
-        threshold = self.cfg.holder_fraction * self._robust_median
-        holders = sum(1 for b in self.balances if b >= threshold and b > 0) if self._robust_median > 0 else 0
+        positive = [b for b in self.balances if b > 0]
+        threshold = self.cfg.holder_fraction * (sum(positive) / len(positive)) if positive else 0.0
+        holders = sum(1 for b in positive if b >= threshold) if threshold > 0 else 0
         if isinstance(self.controller, PeriodAware):
             self.controller.observe_period(amounts, len(users), self.money_supply, holders)
         rec = StepRecord(

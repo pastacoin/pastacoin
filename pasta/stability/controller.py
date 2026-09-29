@@ -270,6 +270,106 @@ class _FlowImpl(_PeriodController):
         return sum(amounts) / n
 
 
+@dataclass
+class HybridController(_PeriodController):
+    """Median-size signal with a flow-per-holder step decomposition (issue #37).
+
+    Two things the chain can see move together under a monetary shock (hoarding, adoption)
+    and apart under a structural one (a change in payment granularity): the median payment
+    and nominal flow per holder. This controller normally acts on the median-size signal.
+    When the median takes a **step** (its fast EMA leaves a slow reference by more than
+    ``step_threshold``) it enters step mode: while the step plays out it acts on the flow
+    signal (flow per holder against its own launch anchor, the monetary part), and once the
+    median has settled (``settle_periods`` periods within ``settle_tolerance``) it re-anchors
+    the median to the level consistent with the current flow signal, so that whatever part of
+    the step flow did not explain is treated as structure, and returns to the size signal.
+    Slow drifts (steady real growth) never look like a step and pass straight through, which
+    is how the size rule tracks growth without an allowance.
+
+    The flow reference itself drifts slowly toward observed flow per holder, but only while the
+    size signal is near zero and no step is open: after growth has been matched by minting,
+    flow per holder is legitimately higher; during a recovery it must not be re-based.
+
+    Consequence: a sudden real-growth doubling is misread as structural (accepted: real growth
+    does not double overnight); a granularity shift during hoarding is split into a re-anchor
+    and a mint.
+    """
+
+    step_threshold: float = 0.15    # fast/slow deviation of the median that opens step mode
+    slow_alpha: float = 0.005       # slow reference EMA (frozen during a step)
+    settle_periods: int = 30        # step is over when the fast median stays within tolerance this long
+    settle_tolerance: float = 0.05
+    users: str = "holders"
+    flow_anchor: Optional[float] = None   # learned with the size anchor unless given
+    calm_tolerance: float = 0.15          # |size signal| below this and no step: flow reference may drift
+    fast_m: float | None = field(default=None, init=False)
+    slow_m: float | None = field(default=None, init=False)
+    fast_f: float | None = field(default=None, init=False)
+    slow_f: float | None = field(default=None, init=False)
+    in_step: bool = field(default=False, init=False)
+    reanchors: int = field(default=0, init=False)
+    last_structural: float = field(default=0.0, init=False)
+    _hist: List[float] = field(default_factory=list, init=False)
+    _learn_f: List[float] = field(default_factory=list, init=False)
+
+    def flow_signal(self) -> Optional[float]:
+        if self.fast_f is None or not self.flow_anchor:
+            return None
+        return self.fast_f / self.flow_anchor - 1.0
+
+    def _statistic(self, amounts, active_users, money_supply, holders):
+        if not amounts:
+            return None
+        med = statistics.median(amounts)
+        n = holders if (self.users == "holders" and holders is not None) else active_users
+        flow = sum(amounts) / n if n else None
+        self.fast_m = _ema(self.fast_m, med, self.alpha)
+        if flow is not None:
+            self.fast_f = _ema(self.fast_f, flow, self.alpha)
+        if not self.in_step:
+            self.slow_m = _ema(self.slow_m, med, self.slow_alpha)
+        if self.anchor is None:
+            if flow is not None and self.flow_anchor is None:
+                self._learn_f.append(flow)
+                if len(self._learn_f) >= self.learn_periods:
+                    self.flow_anchor = statistics.fmean(self._learn_f)
+            return med
+        if not self.slow_m or self.flow_signal() is None:
+            return med
+        js = self.fast_m / self.slow_m - 1.0
+        if not self.in_step and abs(js) > self.step_threshold:
+            self.in_step = True
+            self._hist = []
+        # Real growth raises flow per holder permanently while the median sits at its anchor
+        # (the size rule has minted to match). Let the flow reference follow, but only when
+        # nothing else is going on, so a step or a recovery in progress never re-bases it.
+        if not self.in_step and abs(super().signal()) < self.calm_tolerance:
+            self.flow_anchor = _ema(self.flow_anchor, self.fast_f, self.slow_alpha)
+        if self.in_step:
+            self._hist.append(self.fast_m)
+            self._hist = self._hist[-self.settle_periods:]
+            settled = (len(self._hist) >= self.settle_periods
+                       and max(self._hist) / min(self._hist) - 1.0 < self.settle_tolerance)
+            if settled:
+                # the median level consistent with the current monetary state
+                consistent = self.fast_m / (1.0 + self.flow_signal())
+                structural = consistent / self.anchor - 1.0
+                self.last_structural = structural
+                if abs(structural) > 1e-9:
+                    self.anchor = consistent
+                    self.reanchors += 1
+                self.slow_m = self.fast_m
+                self.in_step = False
+                self._hist = []
+        return med
+
+    def signal(self) -> float:
+        fs = self.flow_signal()
+        if self.in_step and fs is not None:
+            return fs                                   # monetary part only, during a step
+        return super().signal()
+
+
 def make_controller(name: str, **kwargs) -> Controller:
     name = name.lower()
     if name in ("null", "none", "off"):
@@ -282,4 +382,6 @@ def make_controller(name: str, **kwargs) -> Controller:
         return AnchoredSizeController(**kwargs)
     if name in ("flow", "flow-user", "flow_user"):
         return FlowPerUserController(**kwargs)
-    raise ValueError(f"unknown controller {name!r}; choose null, fixed, trend, size or flow")
+    if name in ("hybrid", "size+flow"):
+        return HybridController(**kwargs)
+    raise ValueError(f"unknown controller {name!r}; choose null, fixed, trend, size, flow or hybrid")
