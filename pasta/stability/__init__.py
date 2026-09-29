@@ -7,11 +7,15 @@ simulation says which rule holds up.
 """
 
 from pasta.stability.controller import (  # noqa: F401
+    AnchoredSizeController,
     Controller,
     FixedTargetController,
+    FlowPerUserController,
+    HybridController,
     NullController,
     TrendController,
     make_controller,
 )
 
-__all__ = ["Controller", "NullController", "FixedTargetController", "TrendController", "make_controller"]
+__all__ = ["Controller", "NullController", "FixedTargetController", "TrendController", "AnchoredSizeController",
+           "FlowPerUserController", "HybridController", "make_controller"]

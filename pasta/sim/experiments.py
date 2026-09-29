@@ -29,13 +29,14 @@ STEPS = 5000
 SAMPLE_EVERY = 25
 
 POLICIES = ["null", "trend", "anchored"]
-POLICIES_V2 = ["null", "anchored", "size", "flow"]
+POLICIES_V2 = ["null", "anchored", "size", "flow", "hybrid"]
 POLICY_LABELS = {
     "null": "No controller",
     "trend": "Whitepaper rule (trend)",
     "anchored": "Anchored to launch average",
     "size": "Median size, supply-sized, capped",
     "flow": "Flow per user, supply-sized, capped",
+    "hybrid": "Hybrid: median size, flow-decomposed steps",
 }
 
 SHOCKS = [
@@ -46,6 +47,11 @@ SHOCKS = [
     ("adoption", "Adoption: +200 agents with no coins", [Shock(SHOCK_STEP, "agents", 200)]),
     ("granularity_up", "Granularity x2: fewer, larger transactions", [Shock(SHOCK_STEP, "granularity", 2.0)]),
     ("granularity_down", "Granularity x0.5: more, smaller transactions", [Shock(SHOCK_STEP, "granularity", 0.5)]),
+]
+
+COMBOS = [
+    ("hoard_gran", "Hoarding x1.5 and granularity x2 together", [Shock(SHOCK_STEP, "money_demand", 1.5), Shock(SHOCK_STEP, "granularity", 2.0)]),
+    ("growth_gran", "Steady growth 0.02%/period plus granularity x0.5 step", [Shock(SHOCK_STEP, "granularity", 0.5)]),
 ]
 
 ATTACKS = [
@@ -63,6 +69,7 @@ VARIANTS = [
     ("flow_active", "flow", {"users": "active"}, "Flow per active address"),
     ("flow_even", "flow", {"dispense": "even"}, "Flow per holder, even dispensing"),
     ("flow", "flow", {}, "Flow per holder (proportional, dust floor)"),
+    ("hybrid", "hybrid", {}, "Hybrid (median size, flow-decomposed steps)"),
 ]
 
 
@@ -94,7 +101,7 @@ def policy_config(policy: str, cfg: SimConfig, **params) -> SimConfig:
         kw = {"target": launch_average(cfg), "gain": 0.1}
         kw.update(params)
         return replace(cfg, controller="fixed", controller_kwargs=kw)
-    if policy in ("size", "flow"):
+    if policy in ("size", "flow", "hybrid"):
         kw = dict(V2_DEFAULTS)
         kw.update(params)
         return replace(cfg, controller=policy, controller_kwargs=kw)
@@ -153,6 +160,15 @@ def shocks_panel_v2() -> List[dict]:
 
 def attacks_panel() -> List[dict]:
     return _panel(ATTACKS, POLICIES_V2, base_config_v2)
+
+
+def combos_panel() -> List[dict]:
+    out = []
+    for key, label, shocks in COMBOS:
+        base = base_config_v2(shocks=list(shocks), real_growth_per_step=(GROWTH_RATE if key == "growth_gran" else 0.0))
+        runs = {policy: _summarise(_run(policy_config(policy, base)), shocks) for policy in POLICIES_V2}
+        out.append({"key": key, "label": label, "shock_step": SHOCK_STEP, "runs": runs})
+    return out
 
 
 def variants_table() -> List[dict]:
@@ -242,6 +258,7 @@ def growth_allowance_sweep(allowances=(0.0, 0.0001, 0.0002, 0.0004)) -> List[dic
     flat = base_config_v2()
     ms = _run(policy_config("size", grow)).metrics()
     mn = _run(policy_config("null", grow)).metrics()
+    mh = _run(policy_config("hybrid", grow)).metrics()
     for a in allowances:
         mg = _run(policy_config("flow", grow, growth_per_period=a)).metrics()
         mf = _run(policy_config("flow", flat, growth_per_period=a)).metrics()
@@ -250,6 +267,7 @@ def growth_allowance_sweep(allowances=(0.0, 0.0001, 0.0002, 0.0004)) -> List[dic
             "flow_growth_drift_pct": round(mg["price_drift_pct"], 2),
             "flow_no_growth_drift_pct": round(mf["price_drift_pct"], 2),
             "size_growth_drift_pct": round(ms["price_drift_pct"], 2),
+            "hybrid_growth_drift_pct": round(mh["price_drift_pct"], 2),
             "null_growth_drift_pct": round(mn["price_drift_pct"], 2),
         })
     return rows
@@ -288,6 +306,7 @@ def run_all() -> dict:
         "bias": bias_panel(),
         "shocks_v2": shocks_panel_v2(),
         "attacks": attacks_panel(),
+        "combos": combos_panel(),
         "cap_sweep": cap_sweep(),
         "variants": variants_table(),
         "growth_allowance_sweep": growth_allowance_sweep(),

@@ -88,6 +88,44 @@ true rate it drifts -11 %; but that same allowance with no growth inflates 129 %
 median-size rule holds growth to -4.6 % with no allowance at all, because the median falls
 with the price level.
 
+### The hybrid rule (issue #37)
+
+`HybridController`: acts on the median-size signal; watches flow per holder to decompose
+**steps**. When the fast median leaves its slow reference by more than 15 %, step mode opens:
+the controller acts only on the flow signal (flow per holder against its launch reference,
+the monetary part) until the median has settled for 30 periods, then re-anchors the median to
+the level consistent with the flow signal, so the unexplained remainder is treated as
+structure. Slow drifts never open step mode and pass through to the size signal. The flow
+reference itself drifts toward observed flow per holder only while the size signal is within
+15 % of zero and no step is open, so growth that has been matched by minting re-bases it but
+a recovery in progress does not. Holders are addresses holding at least 10 % of the mean
+positive balance, a definition that does not move with the price level.
+
+| case | median size | flow per holder | **hybrid** |
+|---|---|---|---|
+| none | -1.3 % | +1.0 % | -1.3 % |
+| hoarding x1.5 | -2.1 % (1040) | -3.6 % (1299) | -4.7 % (1235) |
+| dishoarding x0.67 | +1.0 % (1447) | +7.7 % | +10.6 % |
+| real growth x2, sudden | -1.6 % | -53 % | -55 % (misread as structural, by design) |
+| steady growth 0.02 %/period | -4.6 % | -62 % | **-4.6 %** |
+| adoption +200 | -0.5 % | +1.1 % | -6.2 % |
+| granularity x2 | -50 % | +14 % | **+16 %** |
+| granularity x0.5 | +97 % | -6 % | **-10 %** |
+| wash trading | -2.8 % | -0.6 % | -2.8 % |
+| sybil dust | -1.3 % | +6.6 % | -1.3 % |
+| hoarding and granularity x2 together | -51 % | +4.4 % (750) | **+0.4 % (750)** |
+| steady growth plus granularity x0.5 step | +86 % | -63 % | **-24 %** |
+
+Reading: the hybrid keeps the size rule's growth tracking and attack immunity, takes most of
+the flow rule's granularity immunity, and is the only rule that handles hoarding and a
+granularity shift arriving together. It pays for this with a few points on the pure monetary
+shocks (dishoarding +10.6 % versus +1.0 %, adoption -6 % versus -0.5 %), because during a
+step it acts on the noisier flow signal. Two open residuals: a sudden real-growth doubling
+is misread as structural (accepted, real growth does not double overnight), and a
+granularity step landing during steady growth is only partly caught (-24 % versus -4.6 %
+without the step), because the flow reference has to catch up with growth-driven minting
+before the decomposition is clean.
+
 ### What this says
 
 1. **Both round-two rules fix what round one broke.** Supply-sized adjustments remove the
@@ -110,9 +148,9 @@ with the price level.
 5. **Which to ship.** The chain data (`CHAINS-COMPARISON.md`) says granularity shifts on
    payment-style chains were small over 13 years while the median tracked purchasing power,
    which favours the median-size rule with a dust floor and a cap as the primary signal. The
-   flow-per-holder signal is the right *veto*: a step change in the median with no change in
-   flow per holder is a structural shift, not inflation, and should re-anchor rather than
-   trigger. That hybrid is the next experiment (issue to follow).
+   hybrid above adds flow per holder as the step decomposer and is the candidate rule for the
+   node. Still open: the storage-weighted user count from the whitepaper (the real defence
+   against funded sybils), and the growth-plus-granularity residual.
 
 ## 2026-09-27 — first pass: does the average-transaction-size rule hold purchasing power?
 

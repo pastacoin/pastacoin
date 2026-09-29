@@ -149,14 +149,17 @@ def make_figures(results: dict, out_dir: str) -> list[str]:
     written.append(p)
 
     # 6. Round two: shocks and attacks, four policies (gray baseline + three validated slots)
-    V2 = {"null": COLORS["null"], "anchored": COLORS["anchored"], "size": "#1baf7a", "flow": COLORS["trend"]}
-    V2_LABEL = {"null": "No controller", "anchored": "Round one: anchored average", "size": "Median size, supply-sized, capped",
-                "flow": "Flow per holder, supply-sized, capped"}
-    panels = results["shocks_v2"] + results["attacks"]
-    fig, axes = plt.subplots(3, 3, figsize=(14, 9.6), facecolor=SURFACE)
+    V2 = {"null": COLORS["null"], "hybrid": COLORS["anchored"], "size": "#1baf7a", "flow": COLORS["trend"]}
+    V2_LABEL = {"null": "No controller", "size": "Median size, supply-sized, capped",
+                "flow": "Flow per holder, supply-sized, capped", "hybrid": "Hybrid: median size, flow-decomposed steps"}
+    panels = results["shocks_v2"] + results["attacks"] + results.get("combos", [])
+    rows = (len(panels) + 2) // 3
+    fig, axes = plt.subplots(rows, 3, figsize=(14, 3.2 * rows + 0.6), facecolor=SURFACE)
     axes = axes.flatten()
+    for ax in axes[len(panels):]:
+        ax.axis("off")
     for ax, panel in zip(axes, panels):
-        for policy in ("null", "anchored", "size", "flow"):
+        for policy in ("null", "size", "flow", "hybrid"):
             s = panel["runs"][policy]["series"]
             ax.plot(s["step"], s["price_rel"], color=V2[policy], linewidth=2, solid_capstyle="round", label=V2_LABEL[policy])
         if panel["shock_step"]:
@@ -166,9 +169,9 @@ def make_figures(results: dict, out_dir: str) -> list[str]:
         ax.set_ylim(0.3, 2.2)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=4, frameon=False, fontsize=9, labelcolor=INK2)
-    fig.suptitle("Round two: supply-sized, rate-capped controllers under the same shocks plus two attacks (money demand 100)",
+    fig.suptitle("Round two: supply-sized, rate-capped controllers under the shocks, two attacks and two combinations (money demand 100)",
                  x=0.01, ha="left", fontsize=12, color=INK)
-    fig.tight_layout(rect=(0, 0.04, 1, 0.95))
+    fig.tight_layout(rect=(0, 0.03, 1, 0.96))
     p = os.path.join(out_dir, "round2-shocks-attacks.png")
     fig.savefig(p, dpi=150, facecolor=SURFACE)
     plt.close(fig)
@@ -197,6 +200,7 @@ def make_figures(results: dict, out_dir: str) -> list[str]:
     ax.plot(xs, [g["flow_growth_drift_pct"] for g in ga], color=COLORS["trend"], linewidth=2, marker="o", markersize=5, label="flow rule, steady growth")
     ax.plot(xs, [g["flow_no_growth_drift_pct"] for g in ga], color="#d95926", linewidth=2, marker="o", markersize=5, linestyle=(0, (4, 3)), label="flow rule, no growth")
     ax.axhline(ga[0]["size_growth_drift_pct"], color="#1baf7a", linewidth=2, label="median-size rule, steady growth (no allowance needed)")
+    ax.axhline(ga[0]["hybrid_growth_drift_pct"], color=COLORS["anchored"], linewidth=2, linestyle=(0, (2, 2)), label="hybrid rule, steady growth")
     ax.axhline(ga[0]["null_growth_drift_pct"], color=COLORS["null"], linewidth=2, label="no controller, steady growth")
     ax.axhline(0, color="#c3c2b7", linewidth=1)
     _style(ax, f"Growth allowance vs true growth of {results['config']['growth_rate'] * 100:.2f}% per period",
