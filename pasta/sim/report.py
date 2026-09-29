@@ -148,6 +148,66 @@ def make_figures(results: dict, out_dir: str) -> list[str]:
     plt.close(fig)
     written.append(p)
 
+    # 6. Round two: shocks and attacks, four policies (gray baseline + three validated slots)
+    V2 = {"null": COLORS["null"], "anchored": COLORS["anchored"], "size": "#1baf7a", "flow": COLORS["trend"]}
+    V2_LABEL = {"null": "No controller", "anchored": "Round one: anchored average", "size": "Median size, supply-sized, capped",
+                "flow": "Flow per holder, supply-sized, capped"}
+    panels = results["shocks_v2"] + results["attacks"]
+    fig, axes = plt.subplots(3, 3, figsize=(14, 9.6), facecolor=SURFACE)
+    axes = axes.flatten()
+    for ax, panel in zip(axes, panels):
+        for policy in ("null", "anchored", "size", "flow"):
+            s = panel["runs"][policy]["series"]
+            ax.plot(s["step"], s["price_rel"], color=V2[policy], linewidth=2, solid_capstyle="round", label=V2_LABEL[policy])
+        if panel["shock_step"]:
+            ax.axvline(panel["shock_step"], color="#c3c2b7", linewidth=1)
+        ax.axhline(1.0, color="#c3c2b7", linewidth=1)
+        _style(ax, panel["label"], ylabel="price level (pre-shock = 1)")
+        ax.set_ylim(0.3, 2.2)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=4, frameon=False, fontsize=9, labelcolor=INK2)
+    fig.suptitle("Round two: supply-sized, rate-capped controllers under the same shocks plus two attacks (money demand 100)",
+                 x=0.01, ha="left", fontsize=12, color=INK)
+    fig.tight_layout(rect=(0, 0.04, 1, 0.95))
+    p = os.path.join(out_dir, "round2-shocks-attacks.png")
+    fig.savefig(p, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    written.append(p)
+
+    # 7. What the cap buys: recovery time vs damage from a saturated misread
+    caps = results["cap_sweep"]
+    labels = ["none" if c["cap_rate"] is None else f"{c['cap_rate'] * 100:.2f}%" for c in caps]
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4.4), facecolor=SURFACE)
+    rec = [c["hoarding_recovery"] if c["hoarding_recovery"] is not None else 0 for c in caps]
+    a1.bar(labels, rec, width=0.5, color="#1baf7a")
+    _style(a1, "Steps to recover from hoarding (median-size rule, gain 0.01)", ylabel="steps", xlabel="cap: max supply change per period")
+    a2.bar(labels, [max(c["misread_drift_pct"], 1) for c in caps], width=0.5, color=COLORS["trend"])
+    a2.set_yscale("log")
+    _style(a2, "Damage when the signal is fooled (sybil dust, no dust floor)", ylabel="price level change, % (log)", xlabel="cap: max supply change per period")
+    fig.tight_layout()
+    p = os.path.join(out_dir, "round2-cap-tradeoff.png")
+    fig.savefig(p, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    written.append(p)
+
+    # 8. Growth allowance: steady real growth
+    ga = results["growth_allowance_sweep"]
+    fig, ax = plt.subplots(figsize=(7.5, 4.4), facecolor=SURFACE)
+    xs = [f"{g['growth_per_period'] * 100:.2f}%" for g in ga]
+    ax.plot(xs, [g["flow_growth_drift_pct"] for g in ga], color=COLORS["trend"], linewidth=2, marker="o", markersize=5, label="flow rule, steady growth")
+    ax.plot(xs, [g["flow_no_growth_drift_pct"] for g in ga], color="#d95926", linewidth=2, marker="o", markersize=5, linestyle=(0, (4, 3)), label="flow rule, no growth")
+    ax.axhline(ga[0]["size_growth_drift_pct"], color="#1baf7a", linewidth=2, label="median-size rule, steady growth (no allowance needed)")
+    ax.axhline(ga[0]["null_growth_drift_pct"], color=COLORS["null"], linewidth=2, label="no controller, steady growth")
+    ax.axhline(0, color="#c3c2b7", linewidth=1)
+    _style(ax, f"Growth allowance vs true growth of {results['config']['growth_rate'] * 100:.2f}% per period",
+           ylabel="price level change, %", xlabel="allowance: anchor growth per period")
+    ax.legend(frameon=False, fontsize=8, labelcolor=INK2)
+    fig.tight_layout()
+    p = os.path.join(out_dir, "round2-growth-allowance.png")
+    fig.savefig(p, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    written.append(p)
+
     # 5. Bias with no shock
     bias = results["bias"]
     fig, ax = plt.subplots(figsize=(7, 4.2), facecolor=SURFACE)

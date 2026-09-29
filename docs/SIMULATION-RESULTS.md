@@ -21,12 +21,98 @@ https://pastacoin.org/results/ (source: `results/` in the `pastacoin.github.io` 
 | `docs/figures/granularity-sweep.png` | Self-inflicted price change vs transaction size factor (k = 100) |
 | `docs/figures/gain-tradeoff.png` | Recovery steps and mint/burn churn vs gain (hoarding shock) |
 | `docs/figures/bias-no-shock.png` | What each controller does with no shock at all |
+| `docs/figures/round2-shocks-attacks.png` | Round two: four policies under seven shocks and two attacks |
+| `docs/figures/round2-cap-tradeoff.png` | Recovery time vs damage-when-fooled across supply caps |
+| `docs/figures/round2-growth-allowance.png` | Flow-rule growth allowance vs true steady growth |
 
 ![shocks](figures/shocks-small-multiples.png)
 ![drift](figures/drift-by-shock.png)
 ![granularity](figures/granularity-sweep.png)
 ![gain](figures/gain-tradeoff.png)
 ![bias](figures/bias-no-shock.png)
+
+## 2026-09-28 — round two: a robust signal, supply-sized adjustments, a rate cap, and attackers
+
+Closes #27, #28 and the stability side of #13. Code: `pasta/stability/controller.py`
+(`AnchoredSizeController`, `FlowPerUserController`), attackers and holders in
+`pasta/sim/economy.py`, matrix in `pasta/sim/experiments.py` (`shocks_v2`, `attacks`,
+`variants`, `cap_sweep`, `growth_allowance_sweep`). Round two runs with money demand 100 so
+agents hold about ten payments and affordability skips no longer distort the statistics.
+
+### What changed in the controllers
+
+- **Per period, not per transaction.** Each period the controller computes one supply change
+  from its signal, `ΔM = -gain × signal × M`, bounded by `cap_rate × M`, and dispenses it across
+  the next period's transactions **in proportion to their amounts**. Sizing is a fraction of
+  supply, not of the carrier transaction, which removes the round-one bias (#28).
+- **Dust floor.** Amounts below 5 % of the running median are ignored when computing the
+  signal. Without it, sybil dust drags the median to zero and the controller mints at the cap
+  forever.
+- **Two signals.** `size`: the period **median** transaction size against a launch anchor.
+  `flow`: nominal flow per **holder** (addresses holding at least half a typical payment)
+  against a launch anchor with an optional growth allowance. Counting *active addresses*
+  instead of holders makes the flow rule as frequency-sensitive as the size rule.
+- **Attackers.** Wash pairs bounce a typical payment ten times a step; sybils are 200 dust
+  addresses making two dust payments each per step. Both buy their stake from honest agents,
+  so the money supply is unchanged; `attacker_gain` is the mint they harvest.
+
+### Results (drift from step 500 to 5000; shock or attack at step 2000)
+
+| case | no controller | round one anchored | median size | flow per holder |
+|---|---|---|---|---|
+| none | 0.0 % | +3.3 % | -1.3 % | +3.0 % |
+| hoarding x1.5 | -33.3 % | -12.8 % | **-2.1 %** (recovers in 1040) | **-0.4 %** (1230) |
+| dishoarding x0.67 | +49.3 % | +14.2 % | **+1.0 %** | +8.3 % |
+| real growth per capita x2 | -50.0 % | -14.2 % | **-1.6 %** | **-50.5 %** (blind) |
+| adoption +200 users | -50.0 % | -15.1 % | **-0.5 %** | **+3.7 %** |
+| granularity x2 | 0.0 % | -33.0 % | **-50.2 %** (self-inflicted) | **+12.2 %** |
+| granularity x0.5 | 0.0 % | +71.6 % | **+96.9 %** (self-inflicted) | **-1.0 %** |
+| wash trading | 0.0 % | +17.7 %, attackers gain 10x their stake | -2.8 %, attackers lose 80 % | +1.5 %, attackers lose 99 % |
+| sybil dust | 0.0 % | **+364 %** | -1.3 %, no gain | +2.7 %, no gain |
+
+Design-choice table (which knob fixes what): with the dust floor off, the median-size rule
+inflates 376 % under sybil and the attackers harvest 14k PASTA; counting active addresses
+instead of holders, the flow rule inflates 545 % and hands over 20k; dispensing evenly per
+transaction instead of proportionally changes little once the dust floor is on, but was what
+let sybils harvest 95 % of the mint before it.
+
+Cap sweep (median-size rule at gain 0.01, so the cap binds): with no cap, a fooled signal
+inflates 8,063 % and hoarding recovers in 199 steps; at 0.02 % of supply per period the
+same misread is limited to +85 % and hoarding recovers in 1,644 steps; 0.05 % gives +375 %
+and 659 steps; 0.1 % gives +2,194 % and 334 steps. The cap is the insurance and its price is
+recovery speed.
+
+Growth allowance (steady real growth of 0.02 % per period, x2.7 over the run): the flow rule
+with no allowance deflates 60 %, the same as no controller; with the allowance equal to the
+true rate it drifts -11 %; but that same allowance with no growth inflates 129 %. The
+median-size rule holds growth to -4.6 % with no allowance at all, because the median falls
+with the price level.
+
+### What this says
+
+1. **Both round-two rules fix what round one broke.** Supply-sized adjustments remove the
+   steady-state bias; the dust floor and holder counting make sybil spam harmless; proportional
+   dispensing plus burns make wash trading a losing trade. The round-one rule, by contrast, is
+   destroyed by sybil dust (+364 %) and pays wash traders ten times their stake.
+2. **Neither signal is complete, and their blind spots are mirror images.** The median-size
+   rule handles hoarding, growth and adoption within 2 % and fails granularity by 50 to 97 %.
+   The flow-per-holder rule handles hoarding, adoption and granularity within 12 % and misses
+   per-capita real growth entirely. This is the identification problem stated in yesterday's
+   discussion, now measured: on chain, "the economy grew and prices fell" and "people started
+   paying in smaller pieces" look the same. Size treats both as deflation; flow treats both as
+   nothing.
+3. **A growth allowance is a bet, not a fix.** It works only if it matches the true rate, and
+   it costs 129 % inflation over the run when growth fails to show up. The size rule does not
+   need it.
+4. **The cap is worth its price.** It turns an unbounded failure into a bounded one. Set it
+   from the horizon: 0.02 % per period was enough here, and a real deployment should express
+   it as a few percent per year.
+5. **Which to ship.** The chain data (`CHAINS-COMPARISON.md`) says granularity shifts on
+   payment-style chains were small over 13 years while the median tracked purchasing power,
+   which favours the median-size rule with a dust floor and a cap as the primary signal. The
+   flow-per-holder signal is the right *veto*: a step change in the median with no change in
+   flow per holder is a structural shift, not inflation, and should re-anchor rather than
+   trigger. That hybrid is the next experiment (issue to follow).
 
 ## 2026-09-27 — first pass: does the average-transaction-size rule hold purchasing power?
 
