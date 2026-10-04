@@ -53,5 +53,5 @@ bottom of each section.
 | Document | Location | Purpose | Status |
 |---|---|---|---|
 | Perpetual improvement agent | `docs/AGENT.md` | Design: Claude Code cloud routine, daily 06:00 Denver, one issue per run, PR only (never merges), guard rails, kill switch (`agent/PAUSE`), dry-run mode, activation checklist. | Design written 2026-09-27 (#23). Not running; activation is #24 and needs owner steps (repo authorisation, email choice). |
-| Agent identity (Rigatoni) | `agent/README.md`, `agent/IDENTITY.md`, `agent/GUARDRAILS.md`, `agent/ACCOUNTS.md`, `agent/DECISIONS.md` | Who the agent is, whose instructions it follows, what it must never do, every account held in its name, and its decision log. Public by design; no credentials. | Live since 2026-10-03. Email address and seed host are planned, not yet created. |
+| Agent identity (Rigatoni) | `agent/README.md`, `agent/IDENTITY.md`, `agent/GUARDRAILS.md`, `agent/ACCOUNTS.md`, `agent/DECISIONS.md` | Who the agent is, whose instructions it follows, what it must never do, every account held in its name, and its decision log. Public by design; no credentials. | Live since 2026-10-03. Email address active 2026-10-03; seed host planned. |
 | Daily agent prompt | `agent/daily_prompt.md` (planned) | The versioned prompt the routine runs; `MODE: dry-run` or `MODE: live`. | Not created; part of #24. |
