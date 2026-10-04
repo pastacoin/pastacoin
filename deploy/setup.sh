@@ -65,4 +65,4 @@ if [ -f "$DATA_DIR/chain.json" ] || grep -q '^PASTA_GENESIS_ADDRESS=.\+' "$ENV_F
 else
     echo "No chain yet. Put the genesis address in $ENV_FILE (PASTA_GENESIS_ADDRESS=...) and run this script again."
 fi
-echo "Code at $(git -C "$HOME_DIR/src" rev-parse --short HEAD) ($REF). Domain $DOMAIN."
+echo "Code at $(runuser -u pasta -- git -C "$HOME_DIR/src" rev-parse --short HEAD) ($REF). Domain $DOMAIN."
