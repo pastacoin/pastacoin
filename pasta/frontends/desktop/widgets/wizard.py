@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QFormLayout, QLineEdit, QMessageBox, QWizard, QWiz
 
 from pasta import Node, PastaError
 from pasta.core.crypto import public_key_for, sign_transaction
+from pasta.core.units import to_units
 
 
 class DetailsPage(QWizardPage):
@@ -16,7 +17,7 @@ class DetailsPage(QWizardPage):
         self.setSubTitle("The sender address is derived from the private key on the next page.")
         self.receiver_edit = QLineEdit()
         self.amount_edit = QLineEdit()
-        self.amount_edit.setPlaceholderText("0 = zero-value (may mint during bootstrap)")
+        self.amount_edit.setPlaceholderText("PASTA; 0 = validation-only transaction")
         form = QFormLayout()
         form.addRow("Receiver address", self.receiver_edit)
         form.addRow("Amount", self.amount_edit)
@@ -24,9 +25,10 @@ class DetailsPage(QWizardPage):
         for widget in (self.receiver_edit, self.amount_edit):
             widget.textChanged.connect(self.completeChanged)
 
-    def amount(self) -> float:
+    def amount(self) -> int:
+        """Amount in base units; raises ValueError on anything that is not a PASTA amount."""
         txt = self.amount_edit.text().strip()
-        return float(txt) if txt else 0.0
+        return to_units(txt) if txt else 0
 
     def isComplete(self):  # noqa: D401
         if not self.receiver_edit.text().strip():
@@ -93,7 +95,7 @@ class TransactionWizard(QWizard):
         QMessageBox.information(
             self,
             "Transaction created",
-            f"State A. tx_id {tx['tx_id'][:16]}...\nMint: {tx['mint_amount']}\n\n"
+            f"State A. tx_id {tx['tx_id'][:16]}...\n\n"
             "Use Transactions > Validate to move it to State B.",
         )
         super().accept()

@@ -110,6 +110,10 @@ Build the Windows executable (output in `dist/`, not committed):
 
 ### Transaction life-cycle in the prototype
 
+0. Start a node (`python node.py --storage chain.json`). A new chain writes
+   `genesis-wallet.json` next to the chain file: that key holds the 10 PASTA the genesis block
+   creates, the only coins anyone is ever given. Everything else is minted by the stability
+   rule as payments happen (`docs/SPEC.md` section 7).
 1. Generate two keypairs (CLI option 1). The public key is the address; the private key never
    leaves the client.
 2. Send a transaction (option 2). The CLI signs the canonical payload locally; the node verifies
@@ -122,7 +126,9 @@ Build the Windows executable (output in `dist/`, not committed):
 The rules the node enforces are written down in [`docs/SPEC.md`](docs/SPEC.md).
 
 The genesis block starts in State C and a bootstrap transaction sits in the mempool in State B
-so that the first real transaction has something to validate.
+so that the first real transaction has something to validate. An address with no coins can
+still validate by sending a zero-amount transaction. Amounts on the wire are whole base units
+(1 PASTA = 100,000,000); the CLI and the desktop app accept and show PASTA.
 
 ## Repository Layout
 

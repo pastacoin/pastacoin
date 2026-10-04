@@ -4,7 +4,8 @@ Every client (CLI, desktop wizard, web prototype) and the node must agree on the
 exact bytes that get signed. That agreement lives here and nowhere else:
 
 * :func:`canonical_payload` renders ``(sender, receiver, amount, timestamp)`` as
-  compact JSON with sorted keys.
+  compact JSON with sorted keys. ``amount`` is an integer number of base units
+  (see :mod:`pasta.core.units`).
 * :func:`compute_tx_id` is the SHA-256 of that payload and is the stable identity of a
   transaction for its whole life-cycle (mempool and chain).
 * :func:`sign_transaction` / :func:`verify_transaction` sign and check that payload
@@ -19,6 +20,8 @@ import json
 
 import base58
 import ecdsa
+
+from pasta.core.units import as_units
 
 GENESIS_ADDRESS = "GENESIS"
 
@@ -43,13 +46,13 @@ def public_key_for(private_key_b58: str) -> str:
 
 # ----------------------------------------------------------- payload ----
 
-def canonical_payload(sender: str, receiver: str, amount: float, timestamp: int) -> str:
+def canonical_payload(sender: str, receiver: str, amount: int, timestamp: int) -> str:
     """The exact string that is hashed for ``tx_id`` and signed by the sender."""
     return json.dumps(
         {
             "sender": sender,
             "receiver": receiver,
-            "amount": float(amount),
+            "amount": as_units(amount),
             "timestamp": int(timestamp),
         },
         sort_keys=True,
@@ -57,7 +60,7 @@ def canonical_payload(sender: str, receiver: str, amount: float, timestamp: int)
     )
 
 
-def compute_tx_id(sender: str, receiver: str, amount: float, timestamp: int) -> str:
+def compute_tx_id(sender: str, receiver: str, amount: int, timestamp: int) -> str:
     """Stable transaction identity: SHA-256 hex of the canonical payload."""
     return hashlib.sha256(canonical_payload(sender, receiver, amount, timestamp).encode()).hexdigest()
 
@@ -83,13 +86,17 @@ def verify_message(public_key_b58: str, message: str, signature_b58: str) -> boo
         return False
 
 
-def sign_transaction(private_key_b58: str, sender: str, receiver: str, amount: float, timestamp: int) -> str:
+def sign_transaction(private_key_b58: str, sender: str, receiver: str, amount: int, timestamp: int) -> str:
     """Sign the canonical payload of a transaction."""
     return sign_message(private_key_b58, canonical_payload(sender, receiver, amount, timestamp))
 
 
-def verify_transaction(sender: str, receiver: str, amount: float, timestamp: int, signature_b58: str | None) -> bool:
+def verify_transaction(sender: str, receiver: str, amount: int, timestamp: int, signature_b58: str | None) -> bool:
     """Check a transaction signature against the sender address (its public key)."""
     if not signature_b58:
         return False
-    return verify_message(sender, canonical_payload(sender, receiver, amount, timestamp), signature_b58)
+    try:
+        payload = canonical_payload(sender, receiver, amount, timestamp)
+    except ValueError:      # amount is not a whole number of base units
+        return False
+    return verify_message(sender, payload, signature_b58)

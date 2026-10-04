@@ -10,7 +10,7 @@ bottom of each section.
 |---|---|---|---|
 | PaSta Description (whitepaper) | Google Drive, folder "19 PaSta Coin (2024)", file id `16TWRU0hxGe5E3mB4EnAzSYjfOsMuH8AT` | Defines the three mechanisms: passive stability, dynamic chain, user-based validation. Contains diagrams (validation token, storage proof, bifurcation) that exist only as images in the .docx. | Working draft, last edited 2025-08-12. Authoritative until a technical spec exists. |
 | Covacoco (2017) and Nano-C (2018) | Drive, subfolder "Covacoco + Nano-C lineage (superseded by PaSta)" | Ancestor designs. Nano-C's mint/burn-during-transaction idea survives in PaSta. | Superseded. Reference only. |
-| Technical specification | `docs/SPEC.md` | Precise rules a node follows today: canonical payload, tx_id, block fields, state machine, PoW, genesis, balances, mint placeholder, difficulty, verification, REST API, persistence. | Live draft since 2026-09-27 (Phase 1 rules). Grows each phase; completed in Phase 4. |
+| Technical specification | `docs/SPEC.md` | Precise rules a node follows today: canonical payload, tx_id, block fields, state machine, PoW, genesis, balances, mint placeholder, difficulty, verification, REST API, persistence. | Live draft since 2026-09-27 (Phase 1 rules; units, genesis credit and mint rule added 2026-10-03). Grows each phase; completed in Phase 4. |
 
 ## Project management
 
@@ -38,6 +38,7 @@ bottom of each section.
 | Chain daily datasets | `data/chains/<chain>-daily.csv` | Blockchair daily transfer aggregates joined to CoinMetrics community series, committed for offline runs. | Live; refresh with `python -m pasta.analysis.chains_report --fetch <chain>` (Blockchair rate limits: one chain per minute, and bulk pulls can trigger a temporary block). |
 | Simulator model notes | `pasta/sim/economy.py` module docstring | The economic model (quantity theory price level, shocks, what is measured). | Live. Change the docstring when the model changes. |
 | Controller definitions | `pasta/stability/controller.py` module docstring | The exact mint/burn rules under test. | Live. |
+| Chain mint rule | `pasta/stability/chain.py` module docstring, `docs/SPEC.md` section 7 | The launch rule as the chain applies it: constants, periods, budget, what counts as a payment. | Live since 2026-10-03 (#40). Constants are consensus rules. |
 
 ## Public surface
 

@@ -10,7 +10,7 @@ Current project status and roadmap: `docs/STATUS-2026-09-26.md`. Register of eve
 - Python 3.11 venv at `.venv` (PySide6 6.11 installed). Python 3.14 is the system default; do not use it.
 - Package is installed editable (`pip install -e ".[dev,gui]"`, config in `pyproject.toml`): `from pasta import Node` works from anywhere in the venv.
 - Run tests: `.venv/Scripts/python -m pytest -q`
-- Run REST node: `.venv/Scripts/python node.py` (port 5000) then `.venv/Scripts/python pasta-cli.py --node http://localhost:5000`
+- Run REST node: `.venv/Scripts/python node.py --storage chain.json` (port 5000; a new chain writes `genesis-wallet.json`) then `.venv/Scripts/python pasta-cli.py --node http://localhost:5000`
 - Run simulator: `.venv/Scripts/python -m pasta.sim --compare --shock 2000:money_demand:1.5`
 - Bitcoin analysis: `.venv/Scripts/python -m pasta.analysis.bitcoin_report --figures docs/figures --js ../pastacoin.github.io/results/bitcoin-data.js` (add `--fetch` to refresh `data/bitcoin-daily.csv`).
 - Multi-chain analysis: `.venv/Scripts/python -m pasta.analysis.chains_report --figures docs/figures --js ../pastacoin.github.io/results/chains-data.js` (`--fetch ltc doge ...` to refresh; Blockchair blocks bulk pulls, so refresh one chain at a time).
@@ -32,9 +32,10 @@ Work on a branch, open a PR, let the `tests` workflow pass, then merge.
 
     pasta/core        TransactionBlock dataclass, genesis, ecdsa/base58 key + sign helpers
     pasta/validation  State A -> B -> C engine with toy PoW (mine_pow, prefix param)
-    pasta/node        Node: in-memory blockchain + mempool, minting, difficulty retarget, Flask app
+    pasta/node        Node: in-memory blockchain + mempool, difficulty retarget, Flask app; open_node()
     pasta/network     Legacy thin wrapper around Node.create_flask_app
-    pasta/stability   mint/burn controllers (pure policy objects), shared by sim and (later) Node
+    pasta/stability   mint/burn controllers (pure policy objects) shared by the sim and the chain;
+                      chain.py is the launch mint rule the Node and verify_chain both replay
     pasta/sim         PastaTester agent-based economy; python -m pasta.sim --help
     pasta/analysis    real-chain analyses (Bitcoin fixed-supply demonstration)
     data/             committed datasets (bitcoin-daily.csv)
@@ -52,4 +53,6 @@ Work on a branch, open a PR, let the `tests` workflow pass, then merge.
 - Mempool entries are addressed by `tx_id`, never by list index.
 - Rules that the code enforces are written down in `docs/SPEC.md`; change both together.
 - Do not commit `build/`, `dist/`, `__pycache__`, `*.egg-info` (see `.gitignore`).
-- The bootstrap mint (zero-value tx mints toward a 10 PASTA average) is a placeholder for the Phase 2 controller; do not "fix" it in isolation.
+- Amounts are integer base units everywhere inside `pasta/` (`pasta/core/units.py`); only front-ends convert to and from PASTA.
+- Coins enter two ways only: the genesis credit (10 PASTA to `genesis_receiver`) and the mint rule in `pasta/stability/chain.py`. Its constants are consensus rules: changing one changes every `mint_amount`, so change `docs/SPEC.md` section 7 and the tests with it.
+- A new chain needs `Node(genesis_receiver=...)`; `open_node()` generates a wallet when none is given. Tests use the `founder` fixture and the `pay()` helper in `tests/conftest.py`.

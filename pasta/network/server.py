@@ -8,10 +8,9 @@ Prefer ``python node.py`` or ``Node().create_flask_app()`` in new code.
 
 import os
 
-from pasta.node import Node
+from pasta.node import create_default_app
 
-_node = Node(os.getenv("PASTA_STORAGE") or None)
-app = _node.create_flask_app(__name__)
+app = create_default_app()   # PASTA_STORAGE, and PASTA_GENESIS_ADDRESS for a new chain
 
 
 def run(host: str = "0.0.0.0", port: int | None = None):

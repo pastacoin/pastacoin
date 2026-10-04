@@ -13,6 +13,8 @@ import threading
 from typing import Optional
 
 from pasta import Node, PastaError
+from pasta.core.units import format_units
+from pasta.node import open_node
 
 try:
     from PySide6.QtCore import Qt
@@ -85,7 +87,7 @@ class MainWindow(QMainWindow):
             return
 
         def label(t):
-            return f"{t['tx_id'][:10]}  {t['sender_address'][:8]} -> {t['receiver_address'][:8]}  {t['amount']}"
+            return f"{t['tx_id'][:10]}  {t['sender_address'][:8]} -> {t['receiver_address'][:8]}  {format_units(t['amount'])}"
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Validate")
@@ -140,14 +142,23 @@ class MainWindow(QMainWindow):
             bal = self.node.balance_for(address)
             pending = self.node.pending_outgoing(address)
             QMessageBox.information(self, "Balance",
-                                    f"{address[:12]}...: {bal} PASTA (pending outgoing {pending})")
+                                    f"{address[:12]}...: {format_units(bal)} PASTA "
+                                    f"(pending outgoing {format_units(pending)})")
 
 
 def main() -> None:  # pragma: no cover
     app = QApplication(sys.argv)
-    node = Node(os.environ.get("PASTA_STORAGE") or None)
+    node, new_key = open_node(os.environ.get("PASTA_STORAGE") or None,
+                              os.environ.get("PASTA_GENESIS_ADDRESS") or None)
     window = MainWindow(node)
     window.show()
+    if new_key:
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            window, "New chain started",
+            "This is a new chain. Its genesis coins (10 PASTA) belong to this key. Save it now; "
+            "it is not stored anywhere.\n\n"
+            f"Address:\n{new_key['public_key']}\n\nPrivate key:\n{new_key['private_key']}")
     sys.exit(app.exec())
 
 
