@@ -2,6 +2,12 @@
 
 Status: design, not yet running. Tracks issues #23 (this document) and #24 (implementation).
 
+## Identity
+
+The agent is named **Rigatoni**. Its identity, guard rails, account register and decision log
+are public in `agent/` (see `agent/README.md`); credentials are never committed. The guard
+rails there apply to every run in addition to the operating rules below.
+
 ## Goal
 
 Two things the owner asked for on 2026-09-26:
@@ -42,7 +48,7 @@ later if the browser is too much friction.
 Schedule: once a day at 06:00 America/Denver (12:00 UTC; 13:00 UTC in winter), so a PR is
 waiting when the owner wakes up. Cron: `0 12 * * *`.
 
-Prompt outline (the real prompt lives in `tools/agent/daily_prompt.md` once #24 lands, so it
+Prompt outline (the real prompt lives in `agent/daily_prompt.md` once #24 lands, so it
 is versioned with the code):
 
 1. Read `CLAUDE.md`, `docs/README.md`, `docs/STATUS-2026-09-26.md`, `docs/SPEC.md`, and, if the
@@ -74,9 +80,9 @@ Guard rails, in priority order:
 
 - Disabling the routine at https://claude.ai/code/routines stops the next fire; a run already
   in progress finishes.
-- A repository file `tools/agent/PAUSE` (any content) makes the run exit at step 1 with a
+- A repository file `agent/PAUSE` (any content) makes the run exit at step 1 with a
   comment on the tracking issue. This lets the owner pause from a phone by committing one file.
-- `tools/agent/daily_prompt.md` can contain the line `MODE: dry-run`, in which case the run
+- `agent/daily_prompt.md` can contain the line `MODE: dry-run`, in which case the run
   does steps 1 to 3, writes its plan as a comment on the chosen issue, and stops.
 
 ## Observability
@@ -90,7 +96,7 @@ Guard rails, in priority order:
 ## Activation checklist (issue #24)
 
 1. Authorise the cloud environment on `pastacoin/pastacoin` (GitHub app or deploy token).
-2. Add `tools/agent/daily_prompt.md` with the prompt above and `MODE: dry-run`.
+2. Add `agent/daily_prompt.md` with the prompt above and `MODE: dry-run`.
 3. Create the routine (name `pasta-daily`, cron `0 12 * * *`, repo
    `https://github.com/pastacoin/pastacoin`, connector Google-Drive, tools Bash/Read/Write/
    Edit/Glob/Grep).
