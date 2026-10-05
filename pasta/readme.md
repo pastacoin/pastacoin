@@ -9,7 +9,7 @@ pasta/
 ├─ validation/    A -> B -> C transitions, proof-of-work, verify_chain
 ├─ node/          Node: rules, mempool, chain, persistence, Flask app
 ├─ network/       legacy wrapper (python node.py)
-└─ frontends/     desktop GUI (PySide6)
+└─ frontends/     desktop wallet-and-node (PySide6)
 ```
 
 Public API: `from pasta import Node, generate_keypair, sign_transaction, verify_chain, PastaError`.

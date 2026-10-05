@@ -1,0 +1,41 @@
+name: release
+
+# Pushing a tag like v0.3.0 builds the Windows desktop app from that exact commit and
+# attaches it to a GitHub release, so the download anyone gets is built here, from source,
+# and not on somebody's own computer.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,gui]" pyinstaller
+      - name: Run tests (including the desktop app, offscreen)
+        run: python -m pytest -q
+      - name: Build PastaMachine.exe
+        run: pyinstaller --noconfirm PastaMachine.spec
+      - name: Checksum
+        shell: bash
+        run: cd dist && sha256sum PastaMachine.exe > PastaMachine.exe.sha256 && cat PastaMachine.exe.sha256
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/PastaMachine.exe dist/PastaMachine.exe.sha256 \
+            --title "The Pasta Machine $GITHUB_REF_NAME" \
+            --notes-file deploy/RELEASE_NOTES.md
