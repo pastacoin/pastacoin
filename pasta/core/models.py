@@ -24,7 +24,7 @@ class TransactionBlock:
     # Signed transaction data (covered by tx_id and signature)
     sender_address: str
     receiver_address: str
-    amount: float
+    amount: int          # base units (pasta.core.units)
     timestamp: int
 
     # Blockchain linkage (set at finalization)
@@ -33,14 +33,15 @@ class TransactionBlock:
     level: int = 0
 
     # Balance information (set at finalization)
-    sender_balance_before: float = 0.0
-    sender_balance_after: float = 0.0
-    receiver_balance_before: float = 0.0
-    receiver_balance_after: float = 0.0
+    sender_balance_before: int = 0
+    sender_balance_after: int = 0
+    receiver_balance_before: int = 0
+    receiver_balance_after: int = 0
 
-    # Stability mechanism. Receiver is credited amount + mint_amount; sender pays amount.
-    mint_amount: float = 0.0  # positive = mint, negative = burn
-    average_tx_size: float = 0.0
+    # Stability mechanism (set at finalization). Receiver is credited amount + mint_amount;
+    # sender pays amount. average_tx_size records the rule's smoothed median payment.
+    mint_amount: int = 0  # positive = mint, negative = burn
+    average_tx_size: int = 0
 
     # Validation requirements
     required_difficulty: int = 0
@@ -90,16 +91,18 @@ class TransactionBlock:
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
     @classmethod
-    def create_genesis(cls, timestamp: Optional[int] = None) -> "TransactionBlock":
-        """The first block. No signature, no PoW; its hash is its content hash."""
+    def create_genesis(cls, receiver: str, amount: int, timestamp: Optional[int] = None) -> "TransactionBlock":
+        """The first block: the only coins anyone is ever given. No signature, no PoW; its
+        hash is its content hash."""
         genesis = cls(
             sender_address=GENESIS_ADDRESS,
-            receiver_address=GENESIS_ADDRESS,
-            amount=0.0,
+            receiver_address=receiver,
+            amount=int(amount),
             timestamp=int(timestamp if timestamp is not None else time.time()),
             predecessor_id=GENESIS_ADDRESS,
             predecessor_hash="0",
             level=0,
+            receiver_balance_after=int(amount),
             validator_address=GENESIS_ADDRESS,
             state="C",
         )

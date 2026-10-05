@@ -69,12 +69,19 @@ PaSta is designed specifically as a medium of exchange rather than a store of va
 
 ## Development Status
 
-**Prototype, single node.** A Python package (`pasta/`) implements a `TransactionBlock` model,
-an in-memory node with the State A -> B -> C validation life-cycle and toy proof-of-work, a
-REST API, an interactive CLI, and a PySide6 desktop app ("The Pasta Machine").
+**Prototype with a public test chain.** A Python package (`pasta/`) implements the node (State
+A -> B -> C validation life-cycle, toy proof-of-work, the launch mint rule), a REST API, an
+interactive CLI, and a desktop wallet-and-node ("The Pasta Machine"). A public node runs at
+`https://seed.pastacoin.org`; the browser wallet at [pastacoin.org/prototype](https://pastacoin.org/prototype/)
+and the desktop app both use it. The desktop app keeps its own copy of the chain and checks
+every block itself.
 
-Most whitepaper mechanisms are not implemented yet (stability controller, chain bifurcation,
-balance blocks, storage proof, networking). The full gap table and the phased plan live in
+**Try it:** download `PastaMachine.exe` from the
+[latest release](https://github.com/pastacoin/pastacoin/releases/latest) (Windows, built by
+GitHub Actions from source), or open the browser wallet. The coins are test coins with no value.
+
+Still missing from the whitepaper: chain bifurcation, balance blocks, storage proof, and
+node-to-node networking (one node, the seed, orders transactions for now). The full gap table and the phased plan live in
 [`docs/STATUS-2026-09-26.md`](docs/STATUS-2026-09-26.md). Every document the work is done
 against is indexed in [`docs/README.md`](docs/README.md). The backlog is the GitHub issue list.
 
@@ -95,21 +102,29 @@ Run the REST node and the CLI in two terminals:
 .venv/Scripts/python pasta-cli.py --node http://localhost:5000
 ```
 
-Run the desktop app:
+Run the desktop app (follows the public seed by default; `Network` menu for a private chain
+or another node; `PASTA_SEED` and `PASTA_HOME` override the node and the data folder):
 
 ```bash
 .venv/Scripts/python -m pasta.frontends.desktop
 ```
 
-Build the Windows executable (output in `dist/`, not committed):
+Build the Windows executable (`dist/PastaMachine.exe`, not committed). Releases are built the
+same way by `.github/workflows/release.yml` when a `v*` tag is pushed:
 
 ```bash
 .venv/Scripts/pip install pyinstaller
 .venv/Scripts/pyinstaller PastaMachine.spec
 ```
 
+Run your own public node: see [`deploy/README.md`](deploy/README.md).
+
 ### Transaction life-cycle in the prototype
 
+0. Start a node (`python node.py --storage chain.json`). A new chain writes
+   `genesis-wallet.json` next to the chain file: that key holds the 10 PASTA the genesis block
+   creates, the only coins anyone is ever given. Everything else is minted by the stability
+   rule as payments happen (`docs/SPEC.md` section 7).
 1. Generate two keypairs (CLI option 1). The public key is the address; the private key never
    leaves the client.
 2. Send a transaction (option 2). The CLI signs the canonical payload locally; the node verifies
@@ -122,7 +137,9 @@ Build the Windows executable (output in `dist/`, not committed):
 The rules the node enforces are written down in [`docs/SPEC.md`](docs/SPEC.md).
 
 The genesis block starts in State C and a bootstrap transaction sits in the mempool in State B
-so that the first real transaction has something to validate.
+so that the first real transaction has something to validate. An address with no coins can
+still validate by sending a zero-amount transaction. Amounts on the wire are whole base units
+(1 PASTA = 100,000,000); the CLI and the desktop app accept and show PASTA.
 
 ## Repository Layout
 

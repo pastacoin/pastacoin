@@ -1,16 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
-
+# One-file Windows build of the desktop app:  pyinstaller PastaMachine.spec  ->  dist/PastaMachine.exe
 
 a = Analysis(
-    ['pasta\\frontends\\desktop\\__main__.py'],
-    pathex=[],
+    ['pasta/frontends/desktop/__main__.py'],
+    pathex=['.'],                      # find the pasta package from the source tree, however it is installed
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=['pasta.frontends.desktop.app'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['matplotlib', 'numpy', 'tkinter', 'pytest'],
     noarchive=False,
     optimize=0,
 )
@@ -19,26 +19,19 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='PastaMachine',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
+    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='PastaMachine',
 )

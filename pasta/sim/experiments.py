@@ -19,6 +19,8 @@ proportional dispensing, dust floor; flow counts holders):
 """
 from __future__ import annotations
 
+import statistics
+
 from dataclasses import replace
 from typing import Dict, List
 
@@ -270,6 +272,91 @@ def growth_allowance_sweep(allowances=(0.0, 0.0001, 0.0002, 0.0004)) -> List[dic
             "hybrid_growth_drift_pct": round(mh["price_drift_pct"], 2),
             "null_growth_drift_pct": round(mn["price_drift_pct"], 2),
         })
+    return rows
+
+
+# ------------------------------------------------------------ cold start ----
+# The launch mint rule (issue #40): ten coins at genesis, everything else minted by the
+# median-size rule against a declared target, with a looser cap while supply is small.
+
+COLD_START_USERS = 10          # the genesis coins spread over the first ten users
+COLD_START_STEPS = 6000
+
+
+def launch_rule_kwargs(**overrides) -> dict:
+    """The chain's consensus constants (pasta.stability.chain) as simulator controller kwargs."""
+    from pasta.core.units import UNITS_PER_PASTA
+    from pasta.stability.chain import LAUNCH_PARAMS as L
+    u = float(UNITS_PER_PASTA)
+    kw = {"anchor": L.target_median / u, "alpha": L.alpha, "gain": L.gain, "cap_rate": L.cap_rate,
+          "bootstrap_cap_rate": L.bootstrap_cap_rate, "bootstrap_supply": L.bootstrap_supply / u,
+          "dust_fraction": L.dust_fraction}
+    kw.update(overrides)
+    return kw
+
+
+def _adoption(start: int, doubling: int, steps: int, begin: int, limit: int, every: int = 10) -> List[Shock]:
+    """Users double every ``doubling`` steps from ``begin`` until there are ``limit`` of them."""
+    shocks, n, r = [], float(start), 2 ** (every / doubling)
+    for t in range(begin, steps, every):
+        new = n * r
+        if int(new) > limit:
+            break
+        if int(new) > int(n):
+            shocks.append(Shock(t, "agents", int(new) - int(n)))
+        n = new
+    return shocks
+
+
+def cold_start_run(policy: str = "size", doubling: int = 600, limit: int = 3000, wash_pairs: int = 0,
+                   begin: int = 400, steps: int = COLD_START_STEPS, seed: int = 1, **overrides) -> dict:
+    """Ten coins, ten users, then adoption. Reports the price level against the level the
+    declared target implies, who ends up holding the supply, and what self-traders harvest."""
+    from pasta.core.units import UNITS_PER_PASTA
+    from pasta.stability.chain import LAUNCH_PARAMS as L
+    genesis = L.genesis_supply / UNITS_PER_PASTA
+    shocks = _adoption(COLD_START_USERS, doubling, steps, begin, limit)
+    if wash_pairs:
+        shocks.append(Shock(begin + 5, "wash", wash_pairs))
+    shocks.sort(key=lambda s: s.step)
+    kw = {} if policy == "null" else launch_rule_kwargs(**overrides)
+    cfg = SimConfig(agents=COLD_START_USERS, steps=steps, seed=seed, controller=policy, controller_kwargs=kw,
+                    initial_balance=genesis / COLD_START_USERS, money_demand=V2_MONEY_DEMAND,
+                    shocks=shocks, warmup=0)
+    econ = _run(cfg)
+    recs = econ.records
+    # the price level at which the median payment equals the declared target
+    ratios = [r.median_tx_pasta / r.price_level for r in recs if r.tx_count >= 5 and r.price_level > 0]
+    target_level = (L.target_median / UNITS_PER_PASTA) / statistics.median(ratios)
+    rel = [r.price_level / target_level for r in recs]
+    reached = next((i for i, x in enumerate(rel) if x >= 0.9), None)
+    after = rel[reached:] if reached is not None else []
+    m = econ.metrics()
+    out = {
+        "policy": policy, "doubling_steps": doubling, "users": econ.honest,
+        "supply": round(recs[-1].money_supply, 1),
+        "supply_per_user": round(recs[-1].money_supply / econ.honest, 2),
+        "steps_to_target": reached,
+        "level_vs_target_at_adoption_start": round(rel[begin - 1], 3),
+        "level_vs_target_min_after": round(min(after), 3) if after else None,
+        "level_vs_target_max_after": round(max(after), 3) if after else None,
+        "level_vs_target_final": round(rel[-1], 3),
+        "first_users_share": round(sum(econ.balances[:COLD_START_USERS]) / econ.money_supply, 4),
+    }
+    if wash_pairs:
+        out["wash_stake"] = round(m["attacker_stake"], 2)
+        out["wash_share_of_mint"] = round(m["attacker_gain"] / max(1e-9, m["total_minted"]), 3)
+    return out
+
+
+def cold_start() -> List[dict]:
+    """The table in the memo: the launch rule against the alternatives, at two adoption speeds."""
+    rows = []
+    for doubling in (600, 150):
+        rows.append({"case": "no minting", **cold_start_run("null", doubling)})
+        rows.append({"case": "mature cap only (0.2 %)", **cold_start_run("size", doubling, bootstrap_cap_rate=None)})
+        rows.append({"case": "launch rule", **cold_start_run("size", doubling)})
+    rows.append({"case": "launch rule, 2 wash pairs", **cold_start_run("size", 600, wash_pairs=2)})
     return rows
 
 

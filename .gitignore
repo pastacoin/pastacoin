@@ -13,3 +13,8 @@ dist/
 # Local state
 *.log
 .env
+
+# Chain data and wallets written by a local node
+genesis-wallet.json
+*wallet*.json
+chain.json

@@ -31,6 +31,57 @@ https://pastacoin.org/results/ (source: `results/` in the `pastacoin.github.io` 
 ![gain](figures/gain-tradeoff.png)
 ![bias](figures/bias-no-shock.png)
 
+## 2026-10-03 — cold start: ten coins at genesis, everything else minted
+
+Issue #40. The owner's launch rule: the genesis block gives 10 PASTA to the first address and
+nobody is ever given coins again; all other supply is minted by the stability rule as people
+use the coin. `python -c "from pasta.sim.experiments import cold_start; [print(r) for r in cold_start()]"`
+runs the table below. The controller is the median-size rule with the chain's own constants
+(`pasta/stability/chain.py`): **declared** target of 10 PASTA per median payment, gain 2 %,
+cap 2 % of supply per period while supply is under 100,000 PASTA, tapering to 0.2 %.
+
+Setup: 10 users share the 10 genesis coins; from step 400 the user count doubles every 600
+(or 150) steps up to about 3,000. "Level" is the price level relative to the level at which
+a median payment is 10 PASTA, so 1.0 means on target.
+
+| case | adoption doubling | steps to reach 0.9 | lowest after | final | supply per user | first ten users hold |
+|---|---|---|---|---|---|---|
+| no minting | 600 | never | | 0.00 | 0.003 | 26 % |
+| mature cap only (0.2 %) | 600 | 3,957 | 0.90 | 1.00 | 123 | 0.5 % |
+| **launch rule** | 600 | **939** | 0.72 | 0.99 | 123 | 0.6 % |
+| no minting | 150 | never | | 0.00 | 0.003 | 58 % |
+| mature cap only (0.2 %) | 150 | 5,175 | 0.90 | 1.01 | 124 | 0.4 % |
+| **launch rule** | 150 | **1,663** | 0.90 | 1.01 | 125 | 0.9 % |
+| launch rule, 2 wash pairs | 600 | 465 | 0.86 | 1.17 | 117 | 0.2 % |
+
+What this says:
+
+1. **The rule works as a launch mechanism.** Starting from ten coins, supply grows to about
+   123 PASTA per user and the price level settles on the declared target and stays there
+   while users multiply 300-fold. Without minting the coin simply appreciates without limit.
+2. **The founders end up with almost nothing.** The first ten users hold under 1 % of supply
+   at the end. Coins go to whoever is being paid while the rule is minting, which is the
+   early-use incentive the rule is meant to create.
+3. **Catch-up is deliberate inflation.** At launch the ten coins are far too few for anyone to
+   make a 10 PASTA payment, so the rule mints at the cap until they are not. During that
+   phase a coin loses purchasing power quickly: holding early is penalised and being paid is
+   rewarded. The declared target, not the genesis amount, defines what a coin is worth.
+4. **The looser launch cap buys speed.** With only the mature 0.2 % cap the target is reached
+   four times later (3,957 against 939 steps), and under fast adoption the price level sits
+   far below target (the coin worth more than intended) for most of the run. The 0.72 low under the launch rule is noise while there are
+   fewer than twenty users.
+5. **Self-trading harvests the mint.** Two wash pairs collected 19 % of everything minted and
+   pushed the level 17 % over target. In a mature economy the same attack loses money (round
+   two); during catch-up the rule mints every period and pays in proportion to volume, so
+   volume is worth faking. On the chain the only cost is proof-of-work per transaction. The
+   real defence is a user count that cannot be faked (storage-weighted users, #19).
+
+On the chain the rule differs from the simulator in three ways, all in `docs/SPEC.md`
+section 7: a period is 10 payments rather than a time step; the period's mint is a budget
+that cannot be exceeded (in the simulator a large payment after a quiet period would mint
+more than the rule decided); and amounts are integers. The hybrid rule's step decomposition
+is not active at launch: its flow reference cannot be learned from a ten-coin economy.
+
 ## 2026-09-28 — round two: a robust signal, supply-sized adjustments, a rate cap, and attackers
 
 Closes #27, #28 and the stability side of #13. Code: `pasta/stability/controller.py`

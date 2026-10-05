@@ -147,6 +147,9 @@ class _PeriodController:
     asymmetric: bool = False          # mint only into above-median txs, burn only from below-median
     dispense: str = "proportional"    # "proportional" to amount, or "even" per transaction
     dust_fraction: float = 0.05       # ignore amounts below this fraction of the running median tx size
+    bootstrap_cap_rate: Optional[float] = None  # looser cap while supply is small (launch rule); None = off
+    bootstrap_supply: float = 0.0     # at or below this supply the bootstrap cap applies in full; above it
+                                      # the cap falls as bootstrap_supply / M until it meets cap_rate
     stat: float | None = field(default=None, init=False)
     periods: int = field(default=0, init=False)
     _learn: List[float] = field(default_factory=list, init=False)
@@ -175,9 +178,22 @@ class _PeriodController:
             return 0.0
         return (self.stat - a) / a
 
+    def effective_cap(self, money_supply: float) -> Optional[float]:
+        """The cap in force at this supply: ``cap_rate``, raised by the bootstrap schedule."""
+        if self.cap_rate is None or not self.bootstrap_cap_rate or money_supply <= 0:
+            return self.cap_rate
+        boot = self.bootstrap_cap_rate * min(1.0, self.bootstrap_supply / money_supply)
+        return max(self.cap_rate, boot)
+
+    @property
+    def last_delta(self) -> float:
+        """Supply change decided at the last period boundary (after the cap)."""
+        return self._last_delta
+
     def observe_period(self, amounts: List[float], active_users: int, money_supply: float,
                        holders: Optional[int] = None) -> None:
         self.periods += 1
+        self._last_delta = 0.0
         clean = self._clean(amounts)
         if clean:
             self._median = statistics.median(clean)
@@ -194,8 +210,9 @@ class _PeriodController:
         self.stat = _ema(self.stat, x, self.alpha)
         s = self.signal()
         delta = -self.gain * s * money_supply          # negative signal -> mint
-        if self.cap_rate is not None:
-            lim = self.cap_rate * money_supply
+        cap = self.effective_cap(money_supply)
+        if cap is not None:
+            lim = cap * money_supply
             delta = max(-lim, min(lim, delta))
         self._last_delta = delta
         share = 2.0 if self.asymmetric else 1.0        # only about half of next period's txs are eligible

@@ -56,23 +56,19 @@ def pow_is_valid(block: Dict[str, Any], prefix: str) -> bool:
 def build_state_a(
     sender: str,
     receiver: str,
-    amount: float,
+    amount: int,
     timestamp: int,
     signature: str | None,
     *,
-    mint_amount: float = 0.0,
-    average_tx_size: float = 0.0,
     level: int = 0,
 ) -> TransactionBlock:
-    """Create a new State-A transaction. Linkage and balances are filled at finalization."""
+    """Create a new State-A transaction. Linkage, balances and mint are filled at finalization."""
     return TransactionBlock(
         sender_address=sender,
         receiver_address=receiver,
-        amount=float(amount),
+        amount=int(amount),
         timestamp=int(timestamp),
         level=level,
-        mint_amount=float(mint_amount),
-        average_tx_size=float(average_tx_size),
         signature=signature,
         state="A",
     )
@@ -84,10 +80,14 @@ def finalize_block(
     validator_address: str,
     predecessor: TransactionBlock,
     prefix: str,
-    sender_balance_before: float,
-    receiver_balance_before: float,
+    sender_balance_before: int,
+    receiver_balance_before: int,
+    mint_amount: int = 0,
+    average_tx_size: int = 0,
 ) -> None:
-    """State B -> C: link, fill balances, mark validator, mine. Mutates ``target``."""
+    """State B -> C: link, fill balances and mint, mark validator, mine. Mutates ``target``."""
+    target.mint_amount = int(mint_amount)
+    target.average_tx_size = int(average_tx_size)
     target.predecessor_id = predecessor.block_hash or ""
     target.predecessor_hash = predecessor.block_hash or ""
     target.level = predecessor.level

@@ -1,0 +1,6 @@
+# HTTPS front for the node. Caddy obtains and renews the certificate by itself once
+# __DOMAIN__ points at this server.
+__DOMAIN__ {
+	encode gzip
+	reverse_proxy 127.0.0.1:5000
+}

@@ -1,11 +1,13 @@
 import json
 
+import pytest
+
 from pasta import Node
 
 
-def test_snapshot_roundtrip(tmp_path, wallet):
+def test_snapshot_roundtrip(tmp_path, wallet, founder):
     path = tmp_path / "state" / "node.json"
-    node = Node(str(path))
+    node = Node(str(path), genesis_receiver=founder.pub)
     bootstrap = node.get_mempool()[0]["tx_id"]
     alice, bob = wallet(), wallet()
     a = alice.send(node, bob.pub, 0)
@@ -14,24 +16,38 @@ def test_snapshot_roundtrip(tmp_path, wallet):
 
     assert path.exists()
     raw = json.loads(path.read_text(encoding="utf-8"))
-    assert raw["version"] == 1 and len(raw["blockchain"]) == 2
+    assert raw["version"] == 2 and len(raw["blockchain"]) == 2
 
     reloaded = Node(str(path))
     assert reloaded.get_blockchain() == node.get_blockchain()
     assert reloaded.get_mempool() == node.get_mempool()
-    assert reloaded.tx_counter == node.tx_counter
-    assert reloaded.total_value == node.total_value
+    assert reloaded.status() == node.status()
+    assert reloaded.genesis_receiver == founder.pub
     assert reloaded.verify() == []
 
     # the reloaded node continues the same history
     reloaded.validate(b["tx_id"], a["tx_id"])
     assert len(reloaded.get_blockchain()) == 3
-    assert reloaded.balance_for(bob.pub) == 10.0
+    assert reloaded.balance_for(founder.pub) == node.balance_for(founder.pub)
 
 
-def test_reload_does_not_recreate_bootstrap_after_it_was_consumed(tmp_path, wallet):
+def test_old_snapshot_format_is_refused(tmp_path):
     path = tmp_path / "node.json"
-    node = Node(str(path))
+    path.write_text(json.dumps({"version": 1, "blockchain": [], "mempool": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="older chain format"):
+        Node(str(path))
+
+
+def test_genesis_receiver_must_match_a_stored_chain(tmp_path, founder, wallet):
+    path = tmp_path / "node.json"
+    Node(str(path), genesis_receiver=founder.pub)
+    with pytest.raises(ValueError, match="does not match"):
+        Node(str(path), genesis_receiver=wallet().pub)
+
+
+def test_reload_does_not_recreate_bootstrap_after_it_was_consumed(tmp_path, wallet, founder):
+    path = tmp_path / "node.json"
+    node = Node(str(path), genesis_receiver=founder.pub)
     bootstrap = node.get_mempool()[0]["tx_id"]
     a = wallet().send(node, wallet().pub, 0)
     node.validate(a["tx_id"], bootstrap)

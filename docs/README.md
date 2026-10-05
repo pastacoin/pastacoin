@@ -10,7 +10,7 @@ bottom of each section.
 |---|---|---|---|
 | PaSta Description (whitepaper) | Google Drive, folder "19 PaSta Coin (2024)", file id `16TWRU0hxGe5E3mB4EnAzSYjfOsMuH8AT` | Defines the three mechanisms: passive stability, dynamic chain, user-based validation. Contains diagrams (validation token, storage proof, bifurcation) that exist only as images in the .docx. | Working draft, last edited 2025-08-12. Authoritative until a technical spec exists. |
 | Covacoco (2017) and Nano-C (2018) | Drive, subfolder "Covacoco + Nano-C lineage (superseded by PaSta)" | Ancestor designs. Nano-C's mint/burn-during-transaction idea survives in PaSta. | Superseded. Reference only. |
-| Technical specification | `docs/SPEC.md` | Precise rules a node follows today: canonical payload, tx_id, block fields, state machine, PoW, genesis, balances, mint placeholder, difficulty, verification, REST API, persistence. | Live draft since 2026-09-27 (Phase 1 rules). Grows each phase; completed in Phase 4. |
+| Technical specification | `docs/SPEC.md` | Precise rules a node follows today: canonical payload, tx_id, block fields, state machine, PoW, genesis, balances, mint placeholder, difficulty, verification, REST API, persistence. | Live draft since 2026-09-27 (Phase 1 rules; units, genesis credit and mint rule added 2026-10-03). Grows each phase; completed in Phase 4. |
 
 ## Project management
 
@@ -38,15 +38,21 @@ bottom of each section.
 | Chain daily datasets | `data/chains/<chain>-daily.csv` | Blockchair daily transfer aggregates joined to CoinMetrics community series, committed for offline runs. | Live; refresh with `python -m pasta.analysis.chains_report --fetch <chain>` (Blockchair rate limits: one chain per minute, and bulk pulls can trigger a temporary block). |
 | Simulator model notes | `pasta/sim/economy.py` module docstring | The economic model (quantity theory price level, shocks, what is measured). | Live. Change the docstring when the model changes. |
 | Controller definitions | `pasta/stability/controller.py` module docstring | The exact mint/burn rules under test. | Live. |
+| Chain mint rule | `pasta/stability/chain.py` module docstring, `docs/SPEC.md` section 7 | The launch rule as the chain applies it: constants, periods, budget, what counts as a payment. | Live since 2026-10-03 (#40). Constants are consensus rules. |
 
 ## Public surface
 
 | Document | Location | Purpose | Status |
 |---|---|---|---|
-| Website | repo `pastacoin/pastacoin.github.io`, serves `pastacoin.org` | Landing page plus `/prototype/` web client. | Landing live; primary link now points to the results page. Prototype offline: its backend `pastacoin.onrender.com` is down and it posts private keys to the server. Phase 4. |
+| Website | repo `pastacoin/pastacoin.github.io`, serves `pastacoin.org` | Landing page, results pages, and the browser wallet at `/prototype/` (`prototype/README.md` in that repo). | Live. The wallet was rebuilt 2026-10-04: keys stay in the browser, default node `https://seed.pastacoin.org`. |
+| Public seed node | `https://seed.pastacoin.org` | The node the browser wallet and the desktop app use. Built from `deploy/`. | Live since 2026-10-05 UTC. A test chain: it can be reset. |
 | Bitcoin demonstration page | `pastacoin.org/results/bitcoin.html` (+ generated `results/bitcoin-data.js`) | Interactive version of the Bitcoin memo: toy model, raw and supply-adjusted transaction size, users scatter with fitted slope, USD size and fees, era table. | Live since 2026-09-27. |
 | Multi-chain page | `pastacoin.org/results/chains.html` (+ generated `results/chains-data.js`) | Interactive version of the multi-chain memo. | Live since 2026-09-27. |
 | Public results page | `pastacoin.org/results/` (`results/index.html` + generated `results/data.js` in the site repo) | Interactive charts of the simulation results with table views, limitations and reproduce commands. | Live since 2026-09-27. Regenerate `data.js` with `python -m pasta.sim.report --js ../pastacoin.github.io/results/data.js` and commit both repos. |
+
+| Seed node deployment | `deploy/README.md`, `deploy/setup.sh`, `deploy/pasta-node.service`, `deploy/Caddyfile` | How to stand up a public node on a fresh Ubuntu server; the project's own seed is built from exactly these files. | Live since 2026-10-03. |
+
+| Release workflow and notes | `.github/workflows/release.yml`, `deploy/RELEASE_NOTES.md` | A `v*` tag builds `PastaMachine.exe` from that commit, tests it, and publishes a GitHub release with a checksum. | Live since 2026-10-04 (v0.3.0). |
 
 ## Automation (planned)
 

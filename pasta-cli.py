@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from pasta.core.crypto import generate_keypair, public_key_for, sign_transaction
+from pasta.core.units import format_units, to_units
 
 
 class NodeClient:
@@ -45,7 +46,7 @@ class NodeClient:
     def balance(self, address: str): return self._get(f"/balance/{address}")
     def verify(self): return self._get("/verify")
 
-    def send(self, private_key: str, receiver: str, amount: float) -> Dict:
+    def send(self, private_key: str, receiver: str, amount: int) -> Dict:
         sender = public_key_for(private_key)
         ts = int(time.time())
         sig = sign_transaction(private_key, sender, receiver, amount, ts)
@@ -70,14 +71,14 @@ def print_mempool(mempool: List[Dict]) -> None:
     print(f"{'#':>2}  {'tx_id':<12} {'state':<5} {'sender':<12} {'receiver':<12} {'amount':>10} {'mint':>8}")
     for i, tx in enumerate(mempool):
         print(f"{i:>2}  {short(tx['tx_id'], 12):<12} {tx['state']:<5} {short(tx['sender_address'], 12):<12} "
-              f"{short(tx['receiver_address'], 12):<12} {tx['amount']:>10.4f} {tx.get('mint_amount', 0):>8.3f}")
+              f"{short(tx['receiver_address'], 12):<12} {format_units(tx['amount'], 4):>10} {format_units(tx.get('mint_amount', 0), 4):>8}")
 
 
 def print_chain(chain: List[Dict]) -> None:
     print(f"{'h':>3}  {'hash':<12} {'sender':<12} {'receiver':<12} {'amount':>10} {'mint':>8} {'validator':<12}")
     for h, b in enumerate(chain):
         print(f"{h:>3}  {short(b.get('block_hash'), 12):<12} {short(b['sender_address'], 12):<12} "
-              f"{short(b['receiver_address'], 12):<12} {b['amount']:>10.4f} {b.get('mint_amount', 0):>8.3f} "
+              f"{short(b['receiver_address'], 12):<12} {format_units(b['amount'], 4):>10} {format_units(b.get('mint_amount', 0), 4):>8} "
               f"{short(b.get('validator_address'), 12):<12}")
 
 
@@ -118,10 +119,11 @@ def main_menu(client: NodeClient) -> None:
             elif choice == "2":
                 priv = input("Your private key: ").strip()
                 receiver = input("Receiver address: ").strip()
-                amount = float(input("Amount (0 = zero-value, may mint during bootstrap): ").strip() or "0")
+                amount = to_units(input("Amount in PASTA (0 = validation-only transaction): ").strip() or "0")
                 res = client.send(priv, receiver, amount)
                 tx = res["tx"]
-                print(f"\n{res['message']}: tx_id {tx['tx_id']}  mint {tx['mint_amount']}")
+                print(f"\n{res['message']}: tx_id {tx['tx_id']}")
+                print("Any mint or burn is set by the stability rule when the transaction is finalized.")
                 print("Next: option 6 to validate another transaction and move yours to State B.")
             elif choice == "3":
                 print_mempool(client.mempool())
@@ -130,7 +132,8 @@ def main_menu(client: NodeClient) -> None:
             elif choice == "5":
                 addr = input("Address: ").strip()
                 b = client.balance(addr)
-                print(f"Balance {b['balance']} PASTA (pending outgoing {b['pending_outgoing']})")
+                print(f"Balance {format_units(b['balance'])} PASTA "
+                      f"(pending outgoing {format_units(b['pending_outgoing'])})")
             elif choice == "6":
                 mem = client.mempool()
                 mine = pick(mem, "Your State A transaction", {"A"})
