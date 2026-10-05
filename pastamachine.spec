@@ -3,10 +3,10 @@
 
 a = Analysis(
     ['pasta/frontends/desktop/__main__.py'],
-    pathex=[],
+    pathex=['.'],                      # find the pasta package from the source tree, however it is installed
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=['pasta.frontends.desktop.app'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
