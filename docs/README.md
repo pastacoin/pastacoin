@@ -49,6 +49,8 @@ bottom of each section.
 | Multi-chain page | `pastacoin.org/results/chains.html` (+ generated `results/chains-data.js`) | Interactive version of the multi-chain memo. | Live since 2026-09-27. |
 | Public results page | `pastacoin.org/results/` (`results/index.html` + generated `results/data.js` in the site repo) | Interactive charts of the simulation results with table views, limitations and reproduce commands. | Live since 2026-09-27. Regenerate `data.js` with `python -m pasta.sim.report --js ../pastacoin.github.io/results/data.js` and commit both repos. |
 
+| Seed node deployment | `deploy/README.md`, `deploy/setup.sh`, `deploy/pasta-node.service`, `deploy/Caddyfile` | How to stand up a public node on a fresh Ubuntu server; the project's own seed is built from exactly these files. | Live since 2026-10-03. |
+
 ## Automation (planned)
 
 | Document | Location | Purpose | Status |
