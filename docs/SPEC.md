@@ -154,8 +154,8 @@ afterwards. `GET /verify` exposes it.
 
 | Method | Path | Body / result |
 |---|---|---|
-| GET | `/status` | height, mempool size, `units_per_pasta`, `genesis_receiver`, difficulty, and `stability` (supply, minted, burned, target, smoothed median, signal, period, budget, cap) |
-| GET | `/blockchain` | list of blocks |
+| GET | `/status` | height, `tip_hash`, mempool size, `units_per_pasta`, `genesis_receiver`, difficulty, and `stability` (supply, minted, burned, target, smoothed median, signal, period, budget, cap) |
+| GET | `/blockchain` | list of blocks; `?from=N` returns the blocks from index N on |
 | GET | `/mempool`, `/mempool/<tx_id>` | pending transactions |
 | GET | `/balance/<address>` | `{balance, pending_outgoing}` in base units |
 | GET | `/verify` | `{ok, problems}` |
@@ -173,9 +173,29 @@ Protocol rejections return HTTP 400 `{"error": <message>, "type": <exception cla
 is rebuilt by replaying the chain. Version 1 snapshots (float amounts, placeholder mint) are
 refused.
 
+## 12. Following a seed
+
+Until nodes exchange blocks with each other, one node orders the transactions of a chain: the
+seed. `pasta.node.replica.Replica` is a node that follows one.
+
+- It downloads the seed's chain (`GET /blockchain?from=N`) and applies the checks of section 9
+  to every block, one at a time (`ChainVerifier`). A block that fails is refused and nothing
+  after it is accepted.
+- Balances and the mint rule's state come from the blocks it verified, not from the seed's
+  answers.
+- New transactions and validations are passed to the seed (`POST /create_transaction`,
+  `POST /validate`).
+- Each sync asks for the block at its own tip as well. If the seed no longer has that block,
+  the replica stops following and reports that the seed's chain diverged (reset or rewritten);
+  it keeps its verified copy until told to start over.
+- It trusts the seed for the order of transactions and for the first genesis block it sees,
+  and for nothing else.
+
 ## Open questions carried to later phases
 
 - Hybrid step decomposition and a sybil-resistant user count for the mint rule (Phases 2 and 3).
 - Bifurcation, layers, aggregation blocks, balance blocks (Phase 2 model, Phase 3 code).
 - Size-scaled difficulty and validator counts; storage proof (Phase 3).
-- Peer protocol and fork choice (Phase 3).
+- Peer protocol and fork choice (Phase 3). Today a replica follows one seed.
+- `POST /validate` carries no signature and the node does the proof-of-work, so anyone can
+  advance anyone's transaction. The validator should sign, and mine, its own validation.

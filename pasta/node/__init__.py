@@ -215,9 +215,10 @@ class Node:
     # ------------------------------------------------------------------
     # Queries (thread-safe copies)
     # ------------------------------------------------------------------
-    def get_blockchain(self) -> List[Dict[str, Any]]:
+    def get_blockchain(self, start: int = 0) -> List[Dict[str, Any]]:
+        """Copies of the blocks from index ``start`` on (the whole chain by default)."""
         with self._lock:
-            return [dict(b) for b in self.blockchain]
+            return [dict(b) for b in self.blockchain[max(0, int(start)):]]
 
     def get_mempool(self) -> List[Dict[str, Any]]:
         with self._lock:
@@ -231,6 +232,7 @@ class Node:
         with self._lock:
             return {
                 "height": len(self.blockchain),
+                "tip_hash": self.blockchain[-1].get("block_hash"),
                 "mempool_size": len(self.mempool),
                 "units_per_pasta": UNITS_PER_PASTA,
                 "genesis_receiver": self.genesis_receiver,
@@ -393,7 +395,11 @@ class Node:
 
         @app.route("/blockchain")
         def _get_chain():
-            return jsonify(node.get_blockchain())
+            try:
+                start = int(request.args.get("from", 0))
+            except ValueError:
+                return jsonify({"error": "from must be a block index"}), 400
+            return jsonify(node.get_blockchain(start))
 
         @app.route("/mempool")
         def _get_mempool():
