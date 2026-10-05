@@ -7,6 +7,7 @@ from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QDockWidget, QHeaderView, QTableView
 
 from pasta import Node
+from pasta.core.units import format_units
 
 COLUMNS = ["tx_id", "State", "Sender", "Receiver", "Amount", "Mint"]
 
@@ -48,8 +49,8 @@ class MempoolView(QDockWidget):
                 tx.get("state", ""),
                 tx.get("sender_address", "")[:10],
                 tx.get("receiver_address", "")[:10],
-                f"{tx.get('amount', 0):.4f}",
-                f"{tx.get('mint_amount', 0):.3f}",
+                format_units(tx.get("amount", 0), 4),
+                format_units(tx.get("mint_amount", 0), 4),
             ]
             for col, v in enumerate(values):
                 self.model.setItem(idx, col, QStandardItem(v))

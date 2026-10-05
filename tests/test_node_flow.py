@@ -1,5 +1,6 @@
 import pytest
 
+from conftest import P
 from pasta import (
     InsufficientBalance,
     InvalidSignature,
@@ -31,7 +32,7 @@ def test_full_a_b_c_flow(node, wallet, bootstrap_id):
     assert fin["tx_id"] == a_tx["tx_id"]
     assert fin["validator_address"] == bob.pub
     assert fin["predecessor_hash"] == node.get_blockchain()[1]["block_hash"]
-    assert node.balance_for(bob.pub) == 10.0
+    assert node.balance_for(bob.pub) == 0          # zero-amount transactions move and mint nothing
     assert node.verify() == []
 
 
@@ -73,9 +74,9 @@ def test_unsigned_and_badly_signed_rejected(node, wallet):
     good_sig_other_amount = None
     ts = alice.next_timestamp()
     from pasta import sign_transaction
-    good_sig_other_amount = sign_transaction(alice.priv, alice.pub, bob.pub, 1.0, ts)
+    good_sig_other_amount = sign_transaction(alice.priv, alice.pub, bob.pub, P, ts)
     with pytest.raises(InvalidSignature):
-        alice.send(node, bob.pub, 2.0, timestamp=ts, signature=good_sig_other_amount)
+        alice.send(node, bob.pub, 2 * P, timestamp=ts, signature=good_sig_other_amount)
     # signing key does not belong to the claimed sender
     with pytest.raises(InvalidSignature):
         node.create_transaction(bob.pub, alice.pub, 0, timestamp=ts,
@@ -83,7 +84,7 @@ def test_unsigned_and_badly_signed_rejected(node, wallet):
 
 
 def test_signatures_can_be_disabled_for_experiments():
-    node = Node(require_signatures=False)
+    node = Node(genesis_receiver="founder", require_signatures=False)
     tx = node.create_transaction("anyone", "someone", 0)
     assert tx["state"] == "A"
 
@@ -91,23 +92,23 @@ def test_signatures_can_be_disabled_for_experiments():
 def test_overdraft_rejected_at_creation(funded):
     node, rich, helper = funded["node"], funded["rich"], funded["helper"]
     with pytest.raises(InsufficientBalance):
-        helper.send(node, rich.pub, 1.0)              # helper has 0
+        helper.send(node, rich.pub, P)                # helper has 0
     with pytest.raises(InsufficientBalance):
-        rich.send(node, helper.pub, 10.5)             # rich has exactly 10
-    ok = rich.send(node, helper.pub, 6.0)
+        rich.send(node, helper.pub, 10 * P + 1)       # rich has exactly 10 PASTA
+    ok = rich.send(node, helper.pub, 6 * P)
     with pytest.raises(InsufficientBalance):
-        rich.send(node, helper.pub, 5.0)              # 10 - 6 pending = 4 available
+        rich.send(node, helper.pub, 5 * P)            # 10 - 6 pending = 4 available
     assert ok["state"] == "A"
 
 
 def test_spend_flow_updates_balances(funded, wallet):
     node, rich, helper, helper_tx = funded["node"], funded["rich"], funded["helper"], funded["helper_tx"]
-    pay = rich.send(node, helper.pub, 4.0)
+    pay = rich.send(node, helper.pub, 4 * P)
     node.validate(pay["tx_id"], helper_tx["tx_id"])    # pay -> B, helper_tx finalized
     other = wallet().send(node, rich.pub, 0)
     node.validate(other["tx_id"], pay["tx_id"])        # pay finalized by a third party
-    assert node.balance_for(rich.pub) == 6.0
-    assert node.balance_for(helper.pub) == 4.0
+    assert node.balance_for(rich.pub) == 6 * P
+    assert node.balance_for(helper.pub) == 4 * P
     assert node.verify() == []
 
 
@@ -119,6 +120,8 @@ def test_duplicate_and_bad_inputs(node, wallet):
         alice.send(node, bob.pub, 0, timestamp=ts)
     with pytest.raises(InvalidTransaction):
         alice.send(node, bob.pub, -1)
+    with pytest.raises(InvalidTransaction, match="whole number"):
+        node.create_transaction(alice.pub, bob.pub, 1.5, timestamp=ts + 1, signature="x")
     with pytest.raises(InvalidTransaction):
         node.create_transaction("", bob.pub, 0)
     with pytest.raises(NotFound):
@@ -131,3 +134,4 @@ def test_status_reports_shape(node):
     s = node.status()
     assert s["height"] == 1 and s["mempool_size"] == 1
     assert s["require_signatures"] is True and s["persistent"] is False
+    assert s["units_per_pasta"] == P and s["stability"]["supply"] == 10 * P

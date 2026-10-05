@@ -74,3 +74,17 @@ def test_cli_compare_runs(capsys):
     assert sim_main(["--compare", "--agents", "40", "--steps", "300", "--shock", "150:money_demand:1.3"]) == 0
     out = capsys.readouterr().out
     assert "null" in out and "trend" in out and "fixed" in out
+
+
+def test_cold_start_launch_rule_reaches_the_declared_target():
+    from pasta.sim.experiments import cold_start_run
+    kw = dict(doubling=200, limit=150, steps=2500)
+    launch = cold_start_run("size", **kw)
+    nothing = cold_start_run("null", **kw)
+    assert launch["users"] > 100
+    assert launch["steps_to_target"] is not None
+    assert 0.8 < launch["level_vs_target_final"] < 1.2        # the price level sits on the declared target
+    assert launch["first_users_share"] < 0.25                 # the first ten users do not end up owning it
+    assert nothing["steps_to_target"] is None and nothing["level_vs_target_final"] < 0.05
+    slow = cold_start_run("size", bootstrap_cap_rate=None, **kw)   # mature cap only
+    assert slow["steps_to_target"] is None or slow["steps_to_target"] > launch["steps_to_target"]

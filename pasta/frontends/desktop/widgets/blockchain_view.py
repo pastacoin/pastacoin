@@ -7,6 +7,7 @@ from PySide6.QtGui import QAction, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QDockWidget, QHeaderView, QTableView
 
 from pasta import Node
+from pasta.core.units import format_units
 
 COLUMNS = ["Height", "Hash", "Sender", "Receiver", "Amount", "Mint", "Validator", "Diff"]
 
@@ -53,8 +54,8 @@ class BlockchainView(QDockWidget):
                 (block.get("block_hash") or "")[:12],
                 block.get("sender_address", "")[:10],
                 block.get("receiver_address", "")[:10],
-                f"{block.get('amount', 0):.4f}",
-                f"{block.get('mint_amount', 0):.3f}",
+                format_units(block.get("amount", 0), 4),
+                format_units(block.get("mint_amount", 0), 4),
                 (block.get("validator_address") or "")[:10],
                 str(block.get("required_difficulty", 0)),
             ]

@@ -2,7 +2,7 @@ from pasta import Node
 
 
 def test_difficulty_rises_when_blocks_are_fast_and_falls_when_slow():
-    node = Node(retarget_window=3, target_block_time=10.0)
+    node = Node(genesis_receiver="founder", retarget_window=3, target_block_time=10.0)
     assert node.difficulty_for_level(0) == 0
 
     for _ in range(3):
@@ -23,7 +23,7 @@ def test_difficulty_rises_when_blocks_are_fast_and_falls_when_slow():
 
 
 def test_higher_levels_have_shorter_targets():
-    node = Node(target_block_time=600.0)
+    node = Node(genesis_receiver="founder", target_block_time=600.0)
     assert node._target_block_time_for_level(0) == 600.0
     assert node._target_block_time_for_level(1) == 300.0
     assert node._target_block_time_for_level(20) == 1.0
