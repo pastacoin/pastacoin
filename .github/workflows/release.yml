@@ -28,6 +28,19 @@ jobs:
         run: python -m pytest -q
       - name: Build PastaMachine.exe
         run: pyinstaller --noconfirm PastaMachine.spec
+      - name: Check that the built program starts
+        shell: bash
+        run: |
+          # A build that cannot import its own code exits at once and writes nothing.
+          export QT_QPA_PLATFORM=offscreen
+          export PASTA_HOME="$RUNNER_TEMP/pasta-smoke"
+          ./dist/PastaMachine.exe &
+          sleep 20
+          test -f "$RUNNER_TEMP/pasta-smoke/wallets.json" || { echo "PastaMachine.exe did not start"; exit 1; }
+          taskkill //F //IM PastaMachine.exe || true
+          size=$(stat -c %s dist/PastaMachine.exe)
+          echo "size: $size bytes"
+          test "$size" -gt 30000000 || { echo "PastaMachine.exe is too small to contain the app"; exit 1; }
       - name: Checksum
         shell: bash
         run: cd dist && sha256sum PastaMachine.exe > PastaMachine.exe.sha256 && cat PastaMachine.exe.sha256
